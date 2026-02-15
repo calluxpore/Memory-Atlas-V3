@@ -10,7 +10,7 @@
           return;
         }
         var b = document.createElement('base');
-        b.href = p;
+        b.href = location.origin + p;
         document.head.appendChild(b);
       })();
     </script>
@@ -28,6 +28,7 @@
     <link rel="stylesheet" crossorigin href="./assets/index-CYf7FvAR.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <noscript>Enable JavaScript to run Memory Atlas.</noscript>
   </body>
 </html>

@@ -1,16 +1,5 @@
+import { formatDate } from '../utils/formatDate';
 import type { Memory } from '../types/memory';
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
-}
 
 interface MemoryHoverCardProps {
   memory: Memory;

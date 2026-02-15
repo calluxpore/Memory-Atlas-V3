@@ -1,13 +1,19 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, CircleMarker, Rectangle, useMapEvents, useMap } from 'react-leaflet';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, CircleMarker, Rectangle, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import MarkerClusterGroup from 'react-leaflet-cluster';
+import 'react-leaflet-cluster/dist/assets/MarkerCluster.css';
+import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 import { useMemoryStore } from '../store/memoryStore';
 import { MemoryMarker } from './MemoryMarker';
 import { MemoryHoverCard } from './MemoryHoverCard';
 import { SetMapRef } from './SetMapRef';
 import type { Memory } from '../types/memory';
 import type { SearchHighlight } from '../store/memoryStore';
+import { getMemoryLabel } from '../utils/memoryLabel';
+import { memoriesInSidebarOrder, compareOrderThenCreatedAt } from '../utils/memoryOrder';
+import { useIsMd } from '../hooks/useMediaQuery';
 
 function ZoomControlPlacement() {
   const map = useMap();
@@ -38,6 +44,7 @@ L.Icon.Default.mergeOptions({
 
 const TILE_URL_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_URL_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const SIDEBAR_WIDTH = 320;
 
 function MapClickHandler({
   onMapClick,
@@ -45,12 +52,14 @@ function MapClickHandler({
   onMapDragStart,
   onMapZoomStart,
   mapBlurred,
+  hintCenterLeft,
 }: {
   onMapClick: (latlng: L.LatLng) => void;
   onMapMouseMove?: (e: L.LeafletMouseEvent) => void;
   onMapDragStart?: () => void;
   onMapZoomStart?: () => void;
   mapBlurred: boolean;
+  hintCenterLeft: string;
 }) {
   const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null);
   const [hoverTooltip, setHoverTooltip] = useState(false);
@@ -95,7 +104,7 @@ function MapClickHandler({
         <div
           className="pointer-events-none fixed z-[1000] font-mono text-[10px] tracking-widest text-accent opacity-90"
           style={{
-            left: '50%',
+            left: hintCenterLeft,
             bottom: '5.5rem',
             transform: 'translateX(-50%)',
           }}
@@ -108,12 +117,18 @@ function MapClickHandler({
 }
 
 const SEARCH_HIGHLIGHT_BLUE = '#3b82f6';
+const TIMELINE_COLOR = { dark: '#60a5fa', light: '#2563eb' } as const;
 
 function MapContent({
   memories,
+  groups,
   pendingLatLng,
   searchHighlight,
+  timelineEnabled,
+  hiddenGroupIds,
+  theme,
   mapBlurred,
+  hintCenterLeft,
   onMapClick,
   onMapMouseMove,
   onMapDragStart,
@@ -123,9 +138,14 @@ function MapContent({
   onMarkerHoverOut,
 }: {
   memories: Memory[];
+  groups: { id: string; hidden?: boolean }[];
   pendingLatLng: { lat: number; lng: number } | null;
   searchHighlight: SearchHighlight;
+  timelineEnabled: boolean;
+  hiddenGroupIds: Set<string>;
+  theme: 'dark' | 'light';
   mapBlurred: boolean;
+  hintCenterLeft: string;
   onMapClick: (latlng: L.LatLng) => void;
   onMapMouseMove?: (e: L.LeafletMouseEvent) => void;
   onMapDragStart?: () => void;
@@ -134,7 +154,30 @@ function MapContent({
   onMarkerHover: (memory: Memory, point: L.Point) => void;
   onMarkerHoverOut: () => void;
 }) {
-  const visible = memories.filter((m) => visibleMemoryIds.has(m.id));
+  const sortedVisible = memoriesInSidebarOrder(memories, groups).filter((m) =>
+    visibleMemoryIds.has(m.id)
+  );
+
+  const timelinePaths = (() => {
+    if (!timelineEnabled) return [];
+    const paths: [number, number][][] = [];
+    for (const g of groups) {
+      if (hiddenGroupIds.has(g.id)) continue;
+      const groupMemories = memories
+        .filter((m) => (m.groupId ?? null) === g.id && !(m.hidden ?? false))
+        .sort(compareOrderThenCreatedAt);
+      if (groupMemories.length < 2) continue;
+      paths.push(groupMemories.map((m) => [m.lat, m.lng]));
+    }
+    const ungrouped = memories
+      .filter((m) => (m.groupId ?? null) === null && !(m.hidden ?? false))
+      .sort(compareOrderThenCreatedAt);
+    if (ungrouped.length >= 2) {
+      paths.push(ungrouped.map((m) => [m.lat, m.lng]));
+    }
+    return paths;
+  })();
+
   return (
     <>
       <MapClickHandler
@@ -143,6 +186,7 @@ function MapContent({
         onMapDragStart={onMapDragStart}
         onMapZoomStart={onMapZoomStart}
         mapBlurred={mapBlurred}
+        hintCenterLeft={hintCenterLeft}
       />
       {searchHighlight?.type === 'point' && (
         <CircleMarker
@@ -175,6 +219,21 @@ function MapContent({
           zIndexOffset={400}
         />
       )}
+      {timelinePaths.map((positions, i) => (
+        <Polyline
+          key={`timeline-${i}-${positions.length}`}
+          positions={positions}
+          pathOptions={{
+            color: TIMELINE_COLOR[theme],
+            weight: 2.5,
+            opacity: 1,
+            dashArray: '10, 8',
+            lineCap: 'round',
+            lineJoin: 'round',
+            interactive: false,
+          }}
+        />
+      ))}
       {pendingLatLng && (
         <Marker
           position={[pendingLatLng.lat, pendingLatLng.lng]}
@@ -183,14 +242,27 @@ function MapContent({
           interactive={false}
         />
       )}
-      {visible.map((m) => (
-        <MemoryMarker
-          key={m.id}
-          memory={m}
-          onMouseOver={onMarkerHover}
-          onMouseOut={onMarkerHoverOut}
-        />
-      ))}
+      <MarkerClusterGroup
+        iconCreateFunction={(cluster) => {
+          const count = cluster.getChildCount();
+          return L.divIcon({
+            html: `<span class="memory-cluster-count">${count}</span>`,
+            className: 'memory-cluster-icon',
+            iconSize: L.point(36, 36),
+            iconAnchor: [18, 18],
+          });
+        }}
+      >
+        {sortedVisible.map((m, i) => (
+          <MemoryMarker
+            key={m.id}
+            memory={m}
+            label={getMemoryLabel(i)}
+            onMouseOver={onMarkerHover}
+            onMouseOut={onMarkerHoverOut}
+          />
+        ))}
+      </MarkerClusterGroup>
     </>
   );
 }
@@ -217,30 +289,42 @@ export function MapView() {
   const [hoveredMemory, setHoveredMemory] = useState<Memory | null>(null);
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
   const prefersHover = usePrefersHover();
+  const isMd = useIsMd();
+  const sidebarOpen = useMemoryStore((s) => s.sidebarOpen);
 
   const memories = useMemoryStore((s) => s.memories);
   const groups = useMemoryStore((s) => s.groups);
   const theme = useMemoryStore((s) => s.theme);
   const pendingLatLng = useMemoryStore((s) => s.pendingLatLng);
   const searchHighlight = useMemoryStore((s) => s.searchHighlight);
+  const timelineEnabled = useMemoryStore((s) => s.timelineEnabled);
   const isAddingMemory = useMemoryStore((s) => s.isAddingMemory);
+
+  const hintCenterLeft =
+    isMd && sidebarOpen
+      ? `calc(${SIDEBAR_WIDTH}px + (100vw - ${SIDEBAR_WIDTH}px) / 2)`
+      : '50%';
   const setPendingLatLng = useMemoryStore((s) => s.setPendingLatLng);
   const setSearchHighlight = useMemoryStore((s) => s.setSearchHighlight);
   const setIsAddingMemory = useMemoryStore((s) => s.setIsAddingMemory);
 
   const mapBlurred = isAddingMemory;
-  const hiddenGroupIds = new Set(
-    groups.filter((g) => g.hidden).map((g) => g.id)
+  const hiddenGroupIds = useMemo(
+    () => new Set(groups.filter((g) => g.hidden).map((g) => g.id)),
+    [groups]
   );
-  const visibleMemoryIds = new Set(
-    memories
-      .filter((m) => !(m.hidden ?? false))
-      .filter((m) => {
-        const gid = m.groupId ?? null;
-        return gid === null || !hiddenGroupIds.has(gid);
-      })
-      .map((m) => m.id)
-  );
+  const visibleMemoryIds = useMemo(() => {
+    const hidden = new Set(groups.filter((g) => g.hidden).map((g) => g.id));
+    return new Set(
+      memories
+        .filter((m) => !(m.hidden ?? false))
+        .filter((m) => {
+          const gid = m.groupId ?? null;
+          return gid === null || !hidden.has(gid);
+        })
+        .map((m) => m.id)
+    );
+  }, [memories, groups]);
   const tileUrl = theme === 'light' ? TILE_URL_LIGHT : TILE_URL_DARK;
 
   const closeHoverCard = useCallback(() => {
@@ -323,9 +407,9 @@ export function MapView() {
       }`}
     >
       <MapContainer
-        ref={(r) => {
+        ref={useCallback((r: L.Map | null) => {
           mapRef.current = r ?? null;
-        }}
+        }, [])}
         center={[43.6532, -79.3832]}
         zoom={11}
         className="h-full w-full animate-map-in opacity-0"
@@ -337,9 +421,14 @@ export function MapView() {
         <TileLayer url={tileUrl} />
         <MapContent
           memories={memories}
+          groups={groups}
           pendingLatLng={pendingLatLng}
           searchHighlight={searchHighlight}
+          timelineEnabled={timelineEnabled}
+          hiddenGroupIds={hiddenGroupIds}
+          theme={theme}
           mapBlurred={mapBlurred}
+          hintCenterLeft={hintCenterLeft}
           onMapClick={onMapClick}
           onMapMouseMove={onMapMouseMove}
           onMapDragStart={onMapDragStart}

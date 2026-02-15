@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMapRef } from '../context/MapContext';
 import { useMemoryStore } from '../store/memoryStore';
+import { useIsMd } from '../hooks/useMediaQuery';
 import type { SearchHighlightBbox } from '../store/memoryStore';
 
 /** [south, north, west, east] - when present and not a tiny box, treat as area. */
@@ -24,7 +25,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-async function searchNominatim(query: string): Promise<GeoResult[]> {
+async function searchNominatim(query: string, signal?: AbortSignal): Promise<GeoResult[]> {
   const params = new URLSearchParams({
     q: query.trim(),
     format: 'json',
@@ -32,6 +33,7 @@ async function searchNominatim(query: string): Promise<GeoResult[]> {
     limit: '6',
   });
   const res = await fetch(`${NOMINATIM_URL}?${params}`, {
+    signal,
     headers: {
       Accept: 'application/json',
       'User-Agent': 'MemoryAtlasV3/1.0 (https://github.com/memory-atlas)',
@@ -67,12 +69,12 @@ interface PhotonFeature {
   properties: { name?: string; street?: string; city?: string; state?: string; country?: string };
 }
 
-async function searchPhoton(query: string): Promise<GeoResult[]> {
+async function searchPhoton(query: string, signal?: AbortSignal): Promise<GeoResult[]> {
   const params = new URLSearchParams({
     q: query.trim(),
     limit: '8',
   });
-  const res = await fetch(`${PHOTON_URL}?${params}`);
+  const res = await fetch(`${PHOTON_URL}?${params}`, { signal });
   if (!res.ok) return [];
   const data = await res.json();
   const features: PhotonFeature[] = data?.features ?? [];
@@ -87,20 +89,28 @@ async function searchPhoton(query: string): Promise<GeoResult[]> {
     });
 }
 
-async function searchLocation(query: string): Promise<{ results: GeoResult[]; error?: string }> {
+async function searchLocation(
+  query: string,
+  signal?: AbortSignal
+): Promise<{ results: GeoResult[]; error?: string }> {
   const q = query.trim();
   if (!q || q.length < 2) return { results: [] };
   try {
-    let results = await searchNominatim(q);
-    if (results.length === 0) results = await searchPhoton(q);
+    let results = await searchNominatim(q, signal);
+    if (results.length === 0) results = await searchPhoton(q, signal);
     return { results };
   } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e;
     return { results: [], error: 'Search failed. Try again.' };
   }
 }
 
+const SIDEBAR_WIDTH = 320;
+
 export function LocationSearch() {
   const map = useMapRef();
+  const isMd = useIsMd();
+  const sidebarOpen = useMemoryStore((s) => s.sidebarOpen);
   const setSearchHighlight = useMemoryStore((s) => s.setSearchHighlight);
 
   const [query, setQuery] = useState('');
@@ -120,23 +130,23 @@ export function LocationSearch() {
       setLoading(false);
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
-    searchLocation(debouncedQuery)
+    searchLocation(debouncedQuery, controller.signal)
       .then(({ results: data, error: err }) => {
-        if (!cancelled) {
-          setResults(data);
-          setError(err ?? null);
-          setSelectedIndex(-1);
+        setResults(data);
+        setError(err ?? null);
+        setSelectedIndex(-1);
+      })
+      .catch((e) => {
+        if ((e as Error).name !== 'AbortError') {
+          setResults([]);
+          setError('Search failed. Try again.');
         }
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => setLoading(false));
+    return () => controller.abort();
   }, [debouncedQuery]);
 
   useEffect(() => {
@@ -200,8 +210,14 @@ export function LocationSearch() {
   return (
     <div
       ref={containerRef}
-      className="fixed bottom-8 left-1/2 z-[700] w-full max-w-md -translate-x-1/2 px-4 safe-area-bottom"
-      style={{ bottom: 'max(2rem, env(safe-area-inset-bottom, 0px))' }}
+      className="fixed bottom-8 z-[700] w-full max-w-md -translate-x-1/2 px-4 safe-area-bottom transition-[left] duration-300"
+      style={{
+        bottom: 'max(2rem, env(safe-area-inset-bottom, 0px))',
+        left:
+          isMd && sidebarOpen
+            ? `calc(${SIDEBAR_WIDTH}px + (100vw - ${SIDEBAR_WIDTH}px) / 2)`
+            : '50%',
+      }}
     >
       <div className="relative">
         <input

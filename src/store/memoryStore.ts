@@ -13,7 +13,7 @@ export type SearchHighlight =
 interface MemoryState {
   memories: Memory[];
   groups: Group[];
-  selectedMemory: Memory | null;
+  selectedMemoryId: string | null;
   editingMemory: Memory | null;
   isAddingMemory: boolean;
   pendingLatLng: PendingLatLng | null;
@@ -21,6 +21,7 @@ interface MemoryState {
   sidebarOpen: boolean;
   searchQuery: string;
   theme: 'dark' | 'light';
+  timelineEnabled: boolean;
   defaultGroupId: string | null;
   setMemories: (memories: Memory[]) => void;
   addMemory: (memory: Memory) => void;
@@ -34,10 +35,13 @@ interface MemoryState {
   setSidebarOpen: (value: boolean) => void;
   setSearchQuery: (value: string) => void;
   setTheme: (theme: 'dark' | 'light') => void;
+  setTimelineEnabled: (value: boolean) => void;
   setDefaultGroupId: (id: string | null) => void;
   addGroup: (group: Group) => void;
   removeGroup: (id: string) => void;
   updateGroup: (id: string, updates: Partial<Group>) => void;
+  /** Set order of memories within a group (or ungrouped when groupId is null). orderedMemoryIds = full list in desired order. */
+  reorderMemoriesInGroup: (groupId: string | null, orderedMemoryIds: string[]) => void;
 }
 
 export const useMemoryStore = create<MemoryState>()(
@@ -45,7 +49,7 @@ export const useMemoryStore = create<MemoryState>()(
     (set) => ({
       memories: [],
       groups: [],
-      selectedMemory: null,
+      selectedMemoryId: null,
       editingMemory: null,
       isAddingMemory: false,
       pendingLatLng: null,
@@ -53,6 +57,7 @@ export const useMemoryStore = create<MemoryState>()(
       sidebarOpen: true,
       searchQuery: '',
       theme: 'dark',
+      timelineEnabled: false,
       defaultGroupId: null,
 
       setMemories: (memories) => set({ memories }),
@@ -69,21 +74,20 @@ export const useMemoryStore = create<MemoryState>()(
           memories: state.memories.map((m) =>
             m.id === id ? { ...m, ...updates } : m
           ),
-          selectedMemory:
-            state.selectedMemory?.id === id
-              ? { ...state.selectedMemory, ...updates }
-              : state.selectedMemory,
         })),
 
       removeMemory: (id) =>
         set((state) => ({
           memories: state.memories.filter((m) => m.id !== id),
-          selectedMemory: state.selectedMemory?.id === id ? null : state.selectedMemory,
+          selectedMemoryId: state.selectedMemoryId === id ? null : state.selectedMemoryId,
         })),
 
-      setSelectedMemory: (selectedMemory) => set({ selectedMemory }),
+      setSelectedMemory: (memory) =>
+        set({ selectedMemoryId: memory?.id ?? null }),
 
       setTheme: (theme) => set({ theme }),
+
+      setTimelineEnabled: (timelineEnabled) => set({ timelineEnabled }),
 
       setDefaultGroupId: (defaultGroupId) => set({ defaultGroupId }),
 
@@ -109,6 +113,20 @@ export const useMemoryStore = create<MemoryState>()(
           ),
         })),
 
+      reorderMemoriesInGroup: (groupId, orderedMemoryIds) =>
+        set((state) => {
+          const updates = new Map<string, number>();
+          orderedMemoryIds.forEach((id, index) => updates.set(id, index));
+          return {
+            memories: state.memories.map((m) => {
+              const g = m.groupId ?? null;
+              if (g !== groupId) return m;
+              const order = updates.get(m.id);
+              return order === undefined ? m : { ...m, order };
+            }),
+          };
+        }),
+
       setEditingMemory: (editingMemory) => set({ editingMemory }),
 
       setIsAddingMemory: (isAddingMemory) => set({ isAddingMemory }),
@@ -123,12 +141,26 @@ export const useMemoryStore = create<MemoryState>()(
     }),
     {
       name: 'memory-atlas-storage',
+      version: 1,
       partialize: (state) => ({
         memories: state.memories,
         groups: state.groups,
         theme: state.theme,
         defaultGroupId: state.defaultGroupId,
       }),
+      migrate: (persisted: unknown, version: number) => {
+        if (persisted == null || typeof persisted !== 'object') return persisted as Record<string, unknown>;
+        const p = persisted as Record<string, unknown>;
+        if (version < 1) {
+          return {
+            memories: Array.isArray(p.memories) ? p.memories : [],
+            groups: Array.isArray(p.groups) ? p.groups : [],
+            theme: p.theme === 'light' ? 'light' : 'dark',
+            defaultGroupId: p.defaultGroupId ?? null,
+          } as Record<string, unknown>;
+        }
+        return persisted as Record<string, unknown>;
+      },
     }
   )
 );

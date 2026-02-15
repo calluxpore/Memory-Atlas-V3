@@ -6,13 +6,17 @@ import { Sidebar } from './components/Sidebar';
 import { AddMemoryModal } from './components/AddMemoryModal';
 import { MemoryViewer } from './components/MemoryViewer';
 import { ThemeToggle } from './components/ThemeToggle';
+import { TimelineToggle } from './components/TimelineToggle';
 import { LocationSearch } from './components/LocationSearch';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
   const pendingLatLng = useMemoryStore((s) => s.pendingLatLng);
   const isAddingMemory = useMemoryStore((s) => s.isAddingMemory);
   const editingMemory = useMemoryStore((s) => s.editingMemory);
-  const selectedMemory = useMemoryStore((s) => s.selectedMemory);
+  const selectedMemory = useMemoryStore((s) =>
+    s.selectedMemoryId ? s.memories.find((m) => m.id === s.selectedMemoryId) ?? null : null
+  );
   const theme = useMemoryStore((s) => s.theme);
   const setPendingLatLng = useMemoryStore((s) => s.setPendingLatLng);
   const setIsAddingMemory = useMemoryStore((s) => s.setIsAddingMemory);
@@ -61,6 +65,7 @@ function AppContent() {
       <Sidebar />
       <LocationSearch />
       <ThemeToggle />
+      <TimelineToggle />
 
       {(showAddModal || showEditModal) && (
         <AddMemoryModal
@@ -82,9 +87,11 @@ function AppContent() {
 
 function App() {
   return (
-    <MapProvider>
-      <AppContent />
-    </MapProvider>
+    <ErrorBoundary>
+      <MapProvider>
+        <AppContent />
+      </MapProvider>
+    </ErrorBoundary>
   );
 }
 

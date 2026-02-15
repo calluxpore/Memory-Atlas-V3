@@ -1,24 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useMemoryStore } from '../store/memoryStore';
+import { formatDate } from '../utils/formatDate';
+import { formatCoords } from '../utils/formatCoords';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { ConfirmDialog } from './ConfirmDialog';
 import type { Memory } from '../types/memory';
-
-function formatCoords(lat: number, lng: number): string {
-  const ns = lat >= 0 ? 'N' : 'S';
-  const ew = lng >= 0 ? 'E' : 'W';
-  return `${Math.abs(lat).toFixed(4)}° ${ns}, ${Math.abs(lng).toFixed(4)}° ${ew}`;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
-}
 
 interface MemoryViewerProps {
   memory: Memory;
@@ -65,14 +51,17 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
     setParallax({ x: 0, y: 0 });
   }, []);
 
-  const handleRemove = () => {
-    if (window.confirm('Remove this memory from the atlas?')) {
-      removeMemory(memory.id);
-      onClose();
-    }
+  const handleRemove = () => setShowRemoveConfirm(true);
+  const confirmRemove = () => {
+    removeMemory(memory.id);
+    onClose();
+    setShowRemoveConfirm(false);
   };
 
   const [active, setActive] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const viewerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(viewerRef, true);
   useEffect(() => {
     const t = requestAnimationFrame(() => setActive(true));
     return () => cancelAnimationFrame(t);
@@ -80,6 +69,7 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
 
   return (
     <div
+      ref={viewerRef}
       className={`memory-viewer-enter fixed inset-0 z-[1000] flex flex-col bg-background md:flex-row ${active ? 'active' : ''}`}
       role="dialog"
       aria-modal="true"
@@ -113,7 +103,7 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
             {memory.title || 'Untitled'}
           </h2>
           <p className="font-mono mt-2 text-sm text-text-secondary">
-            {formatDate(memory.date)}
+            {formatDate(memory.date, true)}
           </p>
           {memory.notes && (
             <p className="font-body mt-6 text-text-primary/90 leading-relaxed">
@@ -138,6 +128,16 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={showRemoveConfirm}
+        title="Remove memory"
+        message="Remove this memory from the atlas?"
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={confirmRemove}
+        onCancel={() => setShowRemoveConfirm(false)}
+      />
 
       <div
         ref={photoRef}

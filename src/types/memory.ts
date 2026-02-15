@@ -11,6 +11,8 @@ export interface Memory {
   groupId?: string | null;
   /** When true, memory is hidden from the map (still in sidebar, greyed). */
   hidden?: boolean;
+  /** Order within group (or ungrouped). Lower = first. Used for sidebar and map label order. */
+  order?: number;
 }
 
 export interface Group {

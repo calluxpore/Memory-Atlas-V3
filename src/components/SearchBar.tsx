@@ -10,7 +10,7 @@ export function SearchBar() {
       value={searchQuery}
       onChange={(e) => setSearchQuery(e.target.value)}
       placeholder="Search memories..."
-      className="font-mono w-full min-h-[44px] touch-target bg-transparent py-2.5 px-0 text-base text-text-primary placeholder-text-muted outline-none border-none focus:ring-0 md:min-h-0 md:py-2 md:text-sm"
+      className="font-mono w-full min-h-[28px] touch-target bg-transparent py-1 px-0 text-xs text-text-primary placeholder-text-muted outline-none border-none focus:ring-0"
       aria-label="Search memories by title, notes, or date"
     />
   );

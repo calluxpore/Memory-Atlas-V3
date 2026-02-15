@@ -19,9 +19,11 @@
 :root {
   /* Match CartoDB dark water so map and outer area look seamless */
   --color-map-water: #1a1b1a;
+  color-scheme: dark;
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --color-background: #f5f3ef;
   --color-surface: #ffffff;
   --color-surface-elevated: #ebe8e4;
@@ -193,19 +195,23 @@ body,
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 24px;
-  height: 36px;
+  width: 40px;
+  height: 52px;
   gap: 0;
 }
 
 .memory-marker-label {
   flex-shrink: 0;
   font-family: 'DM Mono', monospace;
-  font-size: 10px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1;
   color: var(--color-text-primary);
-  text-shadow: 0 0 2px var(--color-background), 0 1px 2px var(--color-background);
+  text-shadow: 0 0 2px var(--color-background), 0 1px 3px var(--color-background);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
 }
 
 .memory-marker {
@@ -213,7 +219,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
+  width: 40px;
   height: 24px;
 }
 

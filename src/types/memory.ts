@@ -13,6 +13,8 @@ export interface Memory {
   hidden?: boolean;
   /** Order within group (or ungrouped). Lower = first. Used for sidebar and map label order. */
   order?: number;
+  /** Custom icon/emoji label (1–3 chars). When set, overrides the default A/B/C label on sidebar and map. */
+  customLabel?: string | null;
 }
 
 export interface Group {

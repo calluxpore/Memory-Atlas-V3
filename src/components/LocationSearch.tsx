@@ -105,12 +105,11 @@ async function searchLocation(
   }
 }
 
-const SIDEBAR_WIDTH = 320;
-
 export function LocationSearch() {
   const map = useMapRef();
   const isMd = useIsMd();
   const sidebarOpen = useMemoryStore((s) => s.sidebarOpen);
+  const sidebarWidth = useMemoryStore((s) => s.sidebarWidth);
   const setSearchHighlight = useMemoryStore((s) => s.setSearchHighlight);
 
   const [query, setQuery] = useState('');
@@ -215,7 +214,7 @@ export function LocationSearch() {
         bottom: 'max(2rem, env(safe-area-inset-bottom, 0px))',
         left:
           isMd && sidebarOpen
-            ? `calc(${SIDEBAR_WIDTH}px + (100vw - ${SIDEBAR_WIDTH}px) / 2)`
+            ? `calc(${sidebarWidth}px + (100vw - ${sidebarWidth}px) / 2)`
             : '50%',
       }}
     >

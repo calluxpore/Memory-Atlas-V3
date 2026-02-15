@@ -44,7 +44,6 @@ L.Icon.Default.mergeOptions({
 
 const TILE_URL_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_URL_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-const SIDEBAR_WIDTH = 320;
 
 function MapClickHandler({
   onMapClick,
@@ -136,6 +135,7 @@ function MapContent({
   visibleMemoryIds,
   onMarkerHover,
   onMarkerHoverOut,
+  onMarkerClick,
 }: {
   memories: Memory[];
   groups: Group[];
@@ -153,9 +153,15 @@ function MapContent({
   visibleMemoryIds: Set<string>;
   onMarkerHover: (memory: Memory, point: L.Point) => void;
   onMarkerHoverOut: () => void;
+  onMarkerClick?: (memory: Memory) => void;
 }) {
-  const sortedVisible = memoriesInSidebarOrder(memories, groups).filter((m) =>
-    visibleMemoryIds.has(m.id)
+  const memoryIdToLabel = useMemo(() => {
+    const sorted = memoriesInSidebarOrder(memories, groups);
+    return new Map(sorted.map((m, i) => [m.id, getMemoryLabel(i)]));
+  }, [memories, groups]);
+  const sortedVisible = useMemo(
+    () => memoriesInSidebarOrder(memories, groups).filter((m) => visibleMemoryIds.has(m.id)),
+    [memories, groups, visibleMemoryIds]
   );
 
   const timelinePaths = (() => {
@@ -251,13 +257,14 @@ function MapContent({
           });
         }}
       >
-        {sortedVisible.map((m, i) => (
+        {sortedVisible.map((m) => (
           <MemoryMarker
             key={m.id}
             memory={m}
-            label={getMemoryLabel(i)}
+            label={m.customLabel?.trim() || memoryIdToLabel.get(m.id)}
             onMouseOver={onMarkerHover}
             onMouseOut={onMarkerHoverOut}
+            onClick={onMarkerClick}
           />
         ))}
       </MarkerClusterGroup>
@@ -284,6 +291,8 @@ function usePrefersHover() {
 export function MapView() {
   const mapRef = useRef<L.Map | null>(null);
   const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** When true, the card was shown from sidebar click; don't hide it on mouse leave. */
+  const cardPinnedBySidebarRef = useRef(false);
   const [hoveredMemory, setHoveredMemory] = useState<Memory | null>(null);
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number } | null>(null);
   const prefersHover = usePrefersHover();
@@ -293,6 +302,7 @@ export function MapView() {
   const memories = useMemoryStore((s) => s.memories);
   const groups = useMemoryStore((s) => s.groups);
   const theme = useMemoryStore((s) => s.theme);
+  const sidebarWidth = useMemoryStore((s) => s.sidebarWidth);
   const pendingLatLng = useMemoryStore((s) => s.pendingLatLng);
   const searchHighlight = useMemoryStore((s) => s.searchHighlight);
   const timelineEnabled = useMemoryStore((s) => s.timelineEnabled);
@@ -300,11 +310,14 @@ export function MapView() {
 
   const hintCenterLeft =
     isMd && sidebarOpen
-      ? `calc(${SIDEBAR_WIDTH}px + (100vw - ${SIDEBAR_WIDTH}px) / 2)`
+      ? `calc(${sidebarWidth}px + (100vw - ${sidebarWidth}px) / 2)`
       : '50%';
   const setPendingLatLng = useMemoryStore((s) => s.setPendingLatLng);
   const setSearchHighlight = useMemoryStore((s) => s.setSearchHighlight);
   const setIsAddingMemory = useMemoryStore((s) => s.setIsAddingMemory);
+  const setEditingMemory = useMemoryStore((s) => s.setEditingMemory);
+  const cardTargetMemoryId = useMemoryStore((s) => s.cardTargetMemoryId);
+  const setCardTargetMemoryId = useMemoryStore((s) => s.setCardTargetMemoryId);
 
   const mapBlurred = isAddingMemory;
   const hiddenGroupIds = useMemo(
@@ -326,6 +339,7 @@ export function MapView() {
   const tileUrl = theme === 'light' ? TILE_URL_LIGHT : TILE_URL_DARK;
 
   const closeHoverCard = useCallback(() => {
+    cardPinnedBySidebarRef.current = false;
     if (hoverHideTimeoutRef.current) {
       clearTimeout(hoverHideTimeoutRef.current);
       hoverHideTimeoutRef.current = null;
@@ -358,6 +372,7 @@ export function MapView() {
   );
 
   const onMarkerHoverOut = useCallback(() => {
+    if (cardPinnedBySidebarRef.current) return;
     hoverHideTimeoutRef.current = setTimeout(() => {
       setHoveredMemory(null);
       setHoverPoint(null);
@@ -366,6 +381,7 @@ export function MapView() {
   }, []);
 
   const onMapMouseMove = useCallback((e: L.LeafletMouseEvent) => {
+    if (cardPinnedBySidebarRef.current) return;
     const target = e.originalEvent?.target as HTMLElement | undefined;
     if (!target?.closest?.('.memory-marker-wrapper')) {
       if (hoverHideTimeoutRef.current) clearTimeout(hoverHideTimeoutRef.current);
@@ -380,6 +396,14 @@ export function MapView() {
   const onMapDragStart = useCallback(() => closeHoverCard(), [closeHoverCard]);
   const onMapZoomStart = useCallback(() => closeHoverCard(), [closeHoverCard]);
 
+  const onMarkerClick = useCallback(
+    (memory: Memory) => {
+      closeHoverCard();
+      setEditingMemory(memory);
+    },
+    [closeHoverCard, setEditingMemory]
+  );
+
   const onCardMouseEnter = useCallback(() => {
     if (hoverHideTimeoutRef.current) {
       clearTimeout(hoverHideTimeoutRef.current);
@@ -388,6 +412,7 @@ export function MapView() {
   }, []);
 
   const onCardMouseLeave = useCallback(() => {
+    if (cardPinnedBySidebarRef.current) return;
     setHoveredMemory(null);
     setHoverPoint(null);
   }, []);
@@ -397,6 +422,26 @@ export function MapView() {
       if (hoverHideTimeoutRef.current) clearTimeout(hoverHideTimeoutRef.current);
     };
   }, []);
+
+  // When sidebar selects a memory, flyTo is done by Sidebar; we show the card when the map finishes moving.
+  useEffect(() => {
+    if (!cardTargetMemoryId) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const memory = memories.find((m) => m.id === cardTargetMemoryId);
+    if (!memory) return;
+    const onMoveEnd = () => {
+      cardPinnedBySidebarRef.current = true;
+      const point = map.latLngToContainerPoint([memory.lat, memory.lng]);
+      setHoveredMemory(memory);
+      setHoverPoint({ x: point.x, y: point.y });
+      setCardTargetMemoryId(null);
+    };
+    map.once('moveend', onMoveEnd);
+    return () => {
+      map.off('moveend', onMoveEnd);
+    };
+  }, [cardTargetMemoryId, memories, setCardTargetMemoryId]);
 
   return (
     <div
@@ -434,14 +479,19 @@ export function MapView() {
           visibleMemoryIds={visibleMemoryIds}
           onMarkerHover={onMarkerHover}
           onMarkerHoverOut={onMarkerHoverOut}
+          onMarkerClick={onMarkerClick}
         />
       </MapContainer>
-      {prefersHover && hoveredMemory && hoverPoint && (
+      {hoveredMemory && hoverPoint && (
         <MemoryHoverCard
           memory={hoveredMemory}
           point={hoverPoint}
           onMouseEnter={onCardMouseEnter}
           onMouseLeave={onCardMouseLeave}
+          onClick={() => {
+            setEditingMemory(hoveredMemory);
+            closeHoverCard();
+          }}
         />
       )}
     </div>

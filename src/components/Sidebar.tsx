@@ -1,10 +1,12 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useMapRef } from '../context/MapContext';
+import { useIsMd } from '../hooks/useMediaQuery';
 import { useMemoryStore } from '../store/memoryStore';
 import { SearchBar } from './SearchBar';
 import { ConfirmDialog } from './ConfirmDialog';
-import { compareOrderThenCreatedAt } from '../utils/memoryOrder';
+import { compareOrderThenCreatedAt, memoriesInSidebarOrder } from '../utils/memoryOrder';
 import { formatDate } from '../utils/formatDate';
+import { getMemoryLabel } from '../utils/memoryLabel';
 import type { Memory } from '../types/memory';
 
 const UNGROUPED_ID = '__ungrouped__';
@@ -93,21 +95,40 @@ function ReorderDropLine({
   );
 }
 
+const CUSTOM_LABEL_MAX_LENGTH = 3;
+
 function MemoryListItem({
   memory,
   searchQuery,
+  label,
+  onLabelChange,
   onClick,
   onToggleHide,
+  onDelete,
   onDragStartWithId,
 }: {
   memory: Memory;
   searchQuery: string;
+  /** Default letter label (A, B, …) when no customLabel. */
+  label?: string;
+  onLabelChange?: (memoryId: string, value: string | null) => void;
   onClick: (e: React.MouseEvent) => void;
   onToggleHide: (e: React.MouseEvent) => void;
-  /** Called when this row starts being dragged (so parent can track which id is dragging). */
+  onDelete?: (e: React.MouseEvent) => void;
   onDragStartWithId?: (memoryId: string) => void;
 }) {
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [editValue, setEditValue] = useState(memory.customLabel ?? '');
   const isHidden = memory.hidden ?? false;
+  const displayLabel = (memory.customLabel?.trim() || null) ?? label ?? '';
+  const effectiveLabel = displayLabel || label || '';
+
+  const handleLabelBlur = () => {
+    setEditingLabel(false);
+    const v = editValue.trim() || null;
+    if (v !== (memory.customLabel ?? null)) onLabelChange?.(memory.id, v);
+  };
+
   return (
     <div className="group/mem flex w-full min-h-[28px] touch-target items-center gap-0 rounded-sm border-l-2 border-transparent py-0.5 pl-0 pr-0.5 transition-colors hover:bg-surface-elevated hover:border-accent/50 active:bg-surface-elevated">
       <div
@@ -118,11 +139,11 @@ function MemoryListItem({
           e.dataTransfer.effectAllowed = 'move';
           onDragStartWithId?.(memory.id);
         }}
-        className="flex-shrink-0 cursor-grab active:cursor-grabbing p-0.5 text-text-muted opacity-60 group-hover/mem:opacity-100"
+        className="flex-shrink-0 flex min-h-[32px] min-w-[32px] cursor-grab active:cursor-grabbing items-center justify-center p-1.5 text-text-muted opacity-60 group-hover/mem:opacity-100"
         aria-hidden
         title="Drag to reorder"
       >
-        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="9" cy="6" r="1.5" />
           <circle cx="15" cy="6" r="1.5" />
           <circle cx="9" cy="12" r="1.5" />
@@ -131,6 +152,37 @@ function MemoryListItem({
           <circle cx="15" cy="18" r="1.5" />
         </svg>
       </div>
+      {label != null && (
+        <div className="flex-shrink-0 mr-1.5 flex h-6 w-6 items-center justify-center rounded bg-surface-elevated">
+          {editingLabel ? (
+            <input
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value.slice(0, CUSTOM_LABEL_MAX_LENGTH))}
+              onBlur={handleLabelBlur}
+              onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget.blur(), handleLabelBlur())}
+              className="h-full w-full rounded bg-surface text-center text-sm text-text-primary outline-none ring-1 ring-accent"
+              maxLength={CUSTOM_LABEL_MAX_LENGTH}
+              autoFocus
+              aria-label="Edit icon or emoji"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditValue(memory.customLabel ?? '');
+                setEditingLabel(true);
+              }}
+              className="flex h-full w-full items-center justify-center rounded text-sm text-text-secondary transition-colors hover:bg-surface hover:text-accent"
+              title="Click to set emoji or icon"
+              aria-label="Edit icon or emoji"
+            >
+              {effectiveLabel}
+            </button>
+          )}
+        </div>
+      )}
       <button
         type="button"
         onClick={(e) => {
@@ -183,6 +235,23 @@ function MemoryListItem({
           </svg>
         )}
       </button>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(e);
+          }}
+          className="flex-shrink-0 touch-target min-h-[28px] min-w-[28px] p-1 text-text-muted hover:text-danger"
+          aria-label="Delete memory"
+          title="Delete memory"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            <path d="M10 11v6M14 11v6" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -199,9 +268,12 @@ function GroupSection({
   onDelete,
   onMemoryClick,
   onMemoryToggleHide,
+  onMemoryDelete,
+  onMemoryLabelChange,
   onDropMemory,
   onReorderMemories,
   isUngrouped,
+  memoryLabels,
   openForRename,
   onClearOpenForRename,
 }: {
@@ -216,15 +288,19 @@ function GroupSection({
   onDelete: () => void;
   onMemoryClick: (e: React.MouseEvent, m: Memory) => void;
   onMemoryToggleHide: (e: React.MouseEvent, m: Memory) => void;
+  onMemoryDelete?: (e: React.MouseEvent, m: Memory) => void;
+  onMemoryLabelChange?: (memoryId: string, value: string | null) => void;
   onDropMemory: (memoryId: string) => void;
   onReorderMemories: (orderedMemoryIds: string[]) => void;
   isUngrouped: boolean;
+  memoryLabels?: Map<string, string>;
   openForRename?: boolean;
   onClearOpenForRename?: () => void;
 }) {
   const [editingName, setEditingName] = useState(!!openForRename);
   const [editValue, setEditValue] = useState(name);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isListDragOver, setIsListDragOver] = useState(false);
   const [draggedMemoryId, setDraggedMemoryId] = useState<string | null>(null);
   const draggedIdRef = useRef<string | null>(null);
   const [activeDropLineId, setActiveDropLineId] = useState<string | null>(null);
@@ -247,7 +323,7 @@ function GroupSection({
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleHeaderDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (!isDragOver) setIsDragOver(true);
@@ -256,8 +332,26 @@ function GroupSection({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+    setIsListDragOver(false);
     const memoryId = e.dataTransfer.getData(DRAG_MEMORY_KEY);
     if (memoryId) onDropMemory(memoryId);
+  };
+
+  const handleListDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (e.dataTransfer.types.includes(DRAG_MEMORY_KEY)) setIsListDragOver(true);
+  };
+
+  const handleListDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsListDragOver(false);
+    const memoryId = e.dataTransfer.getData(DRAG_MEMORY_KEY);
+    if (memoryId && !memoryIds.includes(memoryId)) onDropMemory(memoryId);
+  };
+
+  const handleListDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsListDragOver(false);
   };
 
   const isHidden = hidden ?? false;
@@ -266,7 +360,7 @@ function GroupSection({
       <div
         className={`flex items-center gap-1 rounded-sm border transition-colors ${isDragOver ? 'border-accent bg-accent-glow' : 'border-transparent hover:border-border'}`}
         onClick={(e) => e.stopPropagation()}
-        onDragOver={handleDragOver}
+        onDragOver={handleHeaderDragOver}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
       >
@@ -352,11 +446,15 @@ function GroupSection({
       </div>
       {!collapsed && (
         <div
-          className="ml-1 mt-0 space-y-0 border-l border-border pl-1"
+          className={`ml-1 mt-0 min-h-[24px] space-y-0 rounded-r border-l border-border pl-1 transition-colors ${isListDragOver ? 'bg-accent-glow' : ''}`}
+          onDragOver={handleListDragOver}
+          onDragLeave={handleListDragLeave}
+          onDrop={handleListDrop}
           onDragEnd={() => {
             setDraggedMemoryId(null);
             draggedIdRef.current = null;
             setActiveDropLineId(null);
+            setIsListDragOver(false);
           }}
         >
           {memories.map((m) => (
@@ -379,12 +477,15 @@ function GroupSection({
               <MemoryListItem
                 memory={m}
                 searchQuery={searchQuery}
+                label={memoryLabels?.get(m.id)}
+                onLabelChange={onMemoryLabelChange}
                 onClick={(e) => onMemoryClick(e, m)}
                 onToggleHide={(e) => onMemoryToggleHide(e, m)}
+                onDelete={onMemoryDelete ? (e) => onMemoryDelete(e, m) : undefined}
                 onDragStartWithId={(id) => {
-                draggedIdRef.current = id;
-                setDraggedMemoryId(id);
-              }}
+                  draggedIdRef.current = id;
+                  setDraggedMemoryId(id);
+                }}
               />
             </div>
           ))}
@@ -411,7 +512,10 @@ export function Sidebar() {
   const searchQuery = useMemoryStore((s) => s.searchQuery);
   const sidebarOpen = useMemoryStore((s) => s.sidebarOpen);
   const setSidebarOpen = useMemoryStore((s) => s.setSidebarOpen);
-  const setSelectedMemory = useMemoryStore((s) => s.setSelectedMemory);
+  const sidebarWidth = useMemoryStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useMemoryStore((s) => s.setSidebarWidth);
+  const isMd = useIsMd();
+  const setCardTargetMemoryId = useMemoryStore((s) => s.setCardTargetMemoryId);
   const addGroup = useMemoryStore((s) => s.addGroup);
   const removeGroup = useMemoryStore((s) => s.removeGroup);
   const updateGroup = useMemoryStore((s) => s.updateGroup);
@@ -421,17 +525,52 @@ export function Sidebar() {
   const [ungroupedCollapsed, setUngroupedCollapsed] = useState(false);
   const [openForRenameId, setOpenForRenameId] = useState<string | null>(null);
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<{ id: string; name: string } | null>(null);
+  const [confirmDeleteMemory, setConfirmDeleteMemory] = useState<{ id: string; name: string } | null>(null);
+  const [resizing, setResizing] = useState(false);
+  const resizeStartRef = useRef({ clientX: 0, width: 0 });
+  const removeMemory = useMemoryStore((s) => s.removeMemory);
+
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      resizeStartRef.current = { clientX: e.clientX, width: sidebarWidth };
+      setResizing(true);
+    },
+    [sidebarWidth]
+  );
+
+  useEffect(() => {
+    if (!resizing) return;
+    const minW = 240;
+    const maxW = 560;
+    const onMove = (e: MouseEvent) => {
+      const { clientX, width } = resizeStartRef.current;
+      setSidebarWidth(Math.min(maxW, Math.max(minW, width + (e.clientX - clientX))));
+    };
+    const onUp = () => {
+      setResizing(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [resizing, setSidebarWidth]);
 
   const handleMemoryClick = useCallback(
     (e: React.MouseEvent, memory: Memory) => {
       e.stopPropagation();
       e.preventDefault();
+      setCardTargetMemoryId(memory.id);
       if (map) {
-        map.flyTo([memory.lat, memory.lng], map.getZoom(), { duration: 0.5 });
+        map.flyTo([memory.lat, memory.lng], 12, { duration: 0.5 });
       }
-      setSelectedMemory(memory);
     },
-    [map, setSelectedMemory]
+    [map, setCardTargetMemoryId]
   );
 
   const handleMemoryToggleHide = useCallback(
@@ -442,6 +581,22 @@ export function Sidebar() {
     [updateMemory]
   );
 
+  const handleMemoryDelete = useCallback((e: React.MouseEvent, m: Memory) => {
+    e.stopPropagation();
+    setConfirmDeleteMemory({ id: m.id, name: m.title || 'Untitled' });
+  }, []);
+
+  const handleMemoryLabelChange = useCallback(
+    (memoryId: string, value: string | null) => {
+      updateMemory(memoryId, { customLabel: value || undefined });
+    },
+    [updateMemory]
+  );
+
+  const memoryLabels = useMemo(() => {
+    const sorted = memoriesInSidebarOrder(memories, groups);
+    return new Map(sorted.map((m, i) => [m.id, getMemoryLabel(i)]));
+  }, [memories, groups]);
   const ungroupedMemories = memories
     .filter((m) => !(m.groupId ?? null))
     .sort(compareOrderThenCreatedAt);
@@ -461,15 +616,18 @@ export function Sidebar() {
         ref={panelRef}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`absolute left-0 bottom-0 z-[800] flex h-[50vh] max-h-[85vh] w-full flex-col rounded-t-lg border-t border-border bg-background/95 shadow-lg backdrop-blur-[20px] transition-transform duration-300 md:bottom-0 md:top-0 md:h-full md:min-h-full md:max-h-none md:w-[320px] md:rounded-none md:border-t-0 md:border-r ${
+        className={`absolute left-0 top-0 z-[800] flex h-full min-h-full w-[85vw] max-w-[320px] flex-row border-r border-border bg-background/95 shadow-lg backdrop-blur-[20px] transition-transform duration-300 md:max-w-none ${
           sidebarOpen
-            ? 'translate-y-0 md:translate-x-0'
-            : 'translate-y-full md:translate-y-0 md:-translate-x-full'
+            ? 'translate-x-0'
+            : '-translate-x-full'
         }`}
         style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          ...(isMd ? { width: sidebarWidth } : undefined),
         }}
       >
+        <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-col gap-1 border-b border-border p-2">
           <div className="flex items-center gap-1">
             <h1 className="font-display min-w-0 flex-1 text-base font-semibold tracking-tight text-text-primary">
@@ -519,9 +677,12 @@ export function Sidebar() {
               onDelete={() => {}}
               onMemoryClick={handleMemoryClick}
               onMemoryToggleHide={handleMemoryToggleHide}
+              onMemoryDelete={handleMemoryDelete}
+              onMemoryLabelChange={handleMemoryLabelChange}
               onDropMemory={(memoryId) => updateMemory(memoryId, { groupId: null })}
               onReorderMemories={(orderedIds) => reorderMemoriesInGroup(null, orderedIds)}
               isUngrouped
+              memoryLabels={memoryLabels}
             />
             {groups.map((g) => (
               <GroupSection
@@ -539,9 +700,12 @@ export function Sidebar() {
                 onDelete={() => setConfirmDeleteGroup({ id: g.id, name: g.name })}
                 onMemoryClick={handleMemoryClick}
                 onMemoryToggleHide={handleMemoryToggleHide}
+                onMemoryDelete={handleMemoryDelete}
+                onMemoryLabelChange={handleMemoryLabelChange}
                 onDropMemory={(memoryId) => updateMemory(memoryId, { groupId: g.id })}
                 onReorderMemories={(orderedIds) => reorderMemoriesInGroup(g.id, orderedIds)}
                 isUngrouped={false}
+                memoryLabels={memoryLabels}
                 openForRename={openForRenameId === g.id}
                 onClearOpenForRename={() => setOpenForRenameId(null)}
               />
@@ -566,6 +730,15 @@ export function Sidebar() {
             {memories.length} MEMORIES ARCHIVED
           </p>
         </div>
+        </div>
+        {isMd && sidebarOpen && (
+          <div
+            role="separator"
+            aria-label="Resize sidebar"
+            onMouseDown={handleResizeStart}
+            className="flex w-2 flex-shrink-0 cursor-col-resize items-stretch border-r border-transparent bg-transparent hover:border-accent/50 active:bg-accent/20"
+          />
+        )}
       </div>
       {!sidebarOpen && (
         <button
@@ -574,7 +747,8 @@ export function Sidebar() {
             e.stopPropagation();
             setSidebarOpen(true);
           }}
-          className="absolute left-4 top-4 z-[801] flex h-9 w-9 items-center justify-center rounded border border-border bg-surface/90 text-text-secondary backdrop-blur-sm transition-colors hover:bg-surface-elevated hover:text-accent active:scale-95"
+          className="absolute left-4 z-[801] flex h-9 w-9 items-center justify-center rounded border border-border bg-surface/90 text-text-secondary backdrop-blur-sm transition-colors hover:bg-surface-elevated hover:text-accent active:scale-95"
+          style={{ top: 'max(1rem, env(safe-area-inset-top, 0px))' }}
           aria-label="Open sidebar"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="rotate-180">
@@ -596,6 +770,21 @@ export function Sidebar() {
           }
         }}
         onCancel={() => setConfirmDeleteGroup(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteMemory}
+        title="Delete memory"
+        message={confirmDeleteMemory ? `Delete "${confirmDeleteMemory.name}" from the atlas?` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => {
+          if (confirmDeleteMemory) {
+            removeMemory(confirmDeleteMemory.id);
+            setConfirmDeleteMemory(null);
+          }
+        }}
+        onCancel={() => setConfirmDeleteMemory(null)}
       />
     </>
   );

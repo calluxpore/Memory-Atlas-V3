@@ -13,14 +13,6 @@ interface MemoryViewerProps {
 
 export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
   const removeMemory = useMemoryStore((s) => s.removeMemory);
-  const setEditingMemory = useMemoryStore((s) => s.setEditingMemory);
-  const setSelectedMemory = useMemoryStore((s) => s.setSelectedMemory);
-
-  const onEdit = () => {
-    setEditingMemory(memory);
-    setSelectedMemory(null);
-    onClose();
-  };
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
   const [hasHover, setHasHover] = useState(false);
   const photoRef = useRef<HTMLDivElement>(null);
@@ -114,14 +106,8 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
         <div className="mt-8 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => onEdit()}
-            className="font-mono touch-target min-h-[44px] min-w-[80px] px-3 text-sm text-accent underline-offset-2 hover:underline active:opacity-80"
-          >
-            EDIT
-          </button>
-          <button
-            type="button"
             onClick={handleRemove}
+            aria-label="Remove memory from atlas"
             className="font-mono touch-target min-h-[44px] min-w-[80px] px-3 text-sm text-danger underline-offset-2 hover:underline active:opacity-80"
           >
             REMOVE FROM ATLAS

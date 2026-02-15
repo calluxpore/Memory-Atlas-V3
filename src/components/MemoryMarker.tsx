@@ -31,8 +31,8 @@ function createMarkerIcon(memory: Memory, isActive: boolean, label: string | und
   return L.divIcon({
     className: 'memory-marker-wrapper marker-enter',
     html,
-    iconSize: hasLabel ? [24, 36] : [24, 24],
-    iconAnchor: hasLabel ? [12, 24] : [12, 12],
+    iconSize: hasLabel ? [40, 52] : [24, 24],
+    iconAnchor: hasLabel ? [20, 52] : [12, 12],
   });
 }
 
@@ -42,13 +42,14 @@ interface MemoryMarkerProps {
   label?: string;
   onMouseOver?: (memory: Memory, point: L.Point) => void;
   onMouseOut?: () => void;
+  /** Called when the marker is clicked (e.g. to open edit). */
+  onClick?: (memory: Memory) => void;
 }
 
-export function MemoryMarker({ memory, label, onMouseOver, onMouseOut }: MemoryMarkerProps) {
+export function MemoryMarker({ memory, label, onMouseOver, onMouseOut, onClick }: MemoryMarkerProps) {
   const map = useMap();
   const markerRef = useRef<L.Marker>(null);
   const isActive = useMemoryStore((s) => s.selectedMemoryId === memory.id);
-  const setSelectedMemory = useMemoryStore((s) => s.setSelectedMemory);
 
   const icon = useMemo(
     () => createMarkerIcon(memory, isActive, label),
@@ -58,7 +59,7 @@ export function MemoryMarker({ memory, label, onMouseOver, onMouseOut }: MemoryM
   const handleClick = (e: L.LeafletMouseEvent) => {
     e.originalEvent.stopPropagation();
     map.flyTo([memory.lat, memory.lng], map.getZoom(), { duration: 0.5 });
-    setSelectedMemory(memory);
+    onClick?.(memory);
   };
 
   return (

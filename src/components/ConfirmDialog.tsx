@@ -8,6 +8,8 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** Use when dialog must appear above another overlay (e.g. z-index 1200). */
+  zIndex?: number;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -19,6 +21,7 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   danger = false,
+  zIndex,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -28,7 +31,8 @@ export function ConfirmDialog({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 p-4"
+      style={{ zIndex: zIndex ?? 1100 }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-title"

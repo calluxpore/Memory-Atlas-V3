@@ -1,4 +1,5 @@
 import { formatDate } from '../utils/formatDate';
+import { useReverseGeocode } from '../hooks/useReverseGeocode';
 import type { Memory } from '../types/memory';
 
 interface MemoryHoverCardProps {
@@ -6,6 +7,8 @@ interface MemoryHoverCardProps {
   point: { x: number; y: number };
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+  /** Called when the card is clicked (e.g. to open edit). */
+  onClick?: () => void;
 }
 
 export function MemoryHoverCard({
@@ -13,14 +16,19 @@ export function MemoryHoverCard({
   point,
   onMouseEnter,
   onMouseLeave,
+  onClick,
 }: MemoryHoverCardProps) {
+  const { location, loading: locationLoading } = useReverseGeocode(memory.lat, memory.lng);
   const notesPreview = memory.notes?.trim()
     ? memory.notes.trim().slice(0, 80) + (memory.notes.length > 80 ? '…' : '')
     : null;
 
   return (
     <div
-      className="memory-hover-card pointer-events-auto absolute z-[850] w-56 rounded border border-border bg-surface shadow-lg"
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => e.key === 'Enter' && onClick() : undefined}
+      className={`memory-hover-card pointer-events-auto absolute z-[850] w-56 rounded border border-border bg-surface shadow-lg ${onClick ? 'cursor-pointer transition-colors hover:border-accent hover:bg-surface-elevated' : ''}`}
       style={{
         left: point.x,
         top: point.y,
@@ -28,6 +36,7 @@ export function MemoryHoverCard({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onClick={onClick}
     >
       {memory.imageDataUrl && (
         <div className="h-24 w-full overflow-hidden rounded-t">
@@ -45,6 +54,11 @@ export function MemoryHoverCard({
         <p className="font-mono mt-0.5 text-xs text-text-secondary">
           {formatDate(memory.date)}
         </p>
+        {(location || locationLoading) && (
+          <p className="font-mono mt-0.5 text-xs text-text-muted line-clamp-2" title={location ?? undefined}>
+            {locationLoading ? '…' : location}
+          </p>
+        )}
         {notesPreview && (
           <p className="font-body mt-1.5 text-xs text-text-muted line-clamp-2">
             {notesPreview}

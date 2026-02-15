@@ -1,8 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import EmojiPicker, { type EmojiClickData, Theme, EmojiStyle } from 'emoji-picker-react';
 import { useMemoryStore } from '../store/memoryStore';
 import { compressImageToDataUrl } from '../utils/imageUtils';
 import { formatCoords } from '../utils/formatCoords';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useReverseGeocode } from '../hooks/useReverseGeocode';
+import { ConfirmDialog } from './ConfirmDialog';
 import type { Memory, PendingLatLng } from '../types/memory';
 
 function generateId(): string {
@@ -18,9 +22,12 @@ interface AddMemoryModalProps {
 export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryModalProps) {
   const addMemory = useMemoryStore((s) => s.addMemory);
   const updateMemory = useMemoryStore((s) => s.updateMemory);
+  const removeMemory = useMemoryStore((s) => s.removeMemory);
   const setEditingMemory = useMemoryStore((s) => s.setEditingMemory);
   const setDefaultGroupId = useMemoryStore((s) => s.setDefaultGroupId);
+  const addGroup = useMemoryStore((s) => s.addGroup);
   const isEdit = !!editingMemory;
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const effectiveLat = editingMemory ? editingMemory.lat : pending?.lat ?? 0;
   const effectiveLng = editingMemory ? editingMemory.lng : pending?.lng ?? 0;
 
@@ -36,11 +43,18 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
   const [groupId, setGroupId] = useState<string | null>(
     editingMemory ? (editingMemory.groupId ?? null) : (defaultGroupId ?? null)
   );
+  const [customLabel, setCustomLabel] = useState(editingMemory?.customLabel ?? '');
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [emojiPickerRect, setEmojiPickerRect] = useState<{ top: number; left: number } | null>(null);
+  const iconButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const groups = useMemoryStore((s) => s.groups);
+  const { location, loading: locationLoading } = useReverseGeocode(effectiveLat, effectiveLng);
   useFocusTrap(modalRef, !!(pending || editingMemory));
 
   const handleFile = useCallback(
@@ -81,6 +95,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
         notes: notes.trim(),
         imageDataUrl,
         groupId: chosenGroupId,
+        customLabel: customLabel.trim() || undefined,
       });
       setEditingMemory(null);
     } else if (pending) {
@@ -94,6 +109,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
         imageDataUrl,
         createdAt: new Date().toISOString(),
         groupId: chosenGroupId,
+        customLabel: customLabel.trim() || undefined,
       };
       addMemory(memory);
       if (chosenGroupId) setDefaultGroupId(chosenGroupId);
@@ -101,13 +117,13 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
     onClose();
   };
 
-  const handleDiscard = () => {
-    setTitle('');
-    setNotes('');
-    setDate(new Date().toISOString().slice(0, 10));
-    setImageDataUrl(null);
-    if (editingMemory) setEditingMemory(null);
-    onClose();
+  const handleDeleteConfirm = () => {
+    if (editingMemory) {
+      removeMemory(editingMemory.id);
+      setEditingMemory(null);
+      setShowDeleteConfirm(false);
+      onClose();
+    }
   };
 
   const [open, setOpen] = useState(false);
@@ -138,6 +154,43 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
   }, [editingMemory, pending, defaultGroupId]);
 
   useEffect(() => {
+    if (editingMemory) {
+      setCustomLabel(editingMemory.customLabel ?? '');
+    }
+  }, [editingMemory?.id, editingMemory?.customLabel]);
+
+  useEffect(() => {
+    if (!emojiPickerOpen || !iconButtonRef.current) return;
+    const el = iconButtonRef.current;
+    const updateRect = () => {
+      const r = el.getBoundingClientRect();
+      setEmojiPickerRect({ top: r.bottom + 8, left: r.left });
+    };
+    updateRect();
+    const resizeObs = new ResizeObserver(updateRect);
+    resizeObs.observe(el);
+    window.addEventListener('scroll', updateRect, true);
+    return () => {
+      resizeObs.disconnect();
+      window.removeEventListener('scroll', updateRect, true);
+    };
+  }, [emojiPickerOpen]);
+
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node) &&
+        iconButtonRef.current && !iconButtonRef.current.contains(e.target as Node)
+      ) {
+        setEmojiPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [emojiPickerOpen]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -163,10 +216,20 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden p-4 py-6 overscroll-contain md:p-8" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <p className="font-mono text-sm text-accent">
-          {formatCoords(effectiveLat, effectiveLng)}
-        </p>
+        <div
+          className={`flex flex-1 flex-col overflow-x-hidden p-4 py-6 overscroll-contain md:p-8 ${emojiPickerOpen ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+        <div className="mb-4 flex flex-col gap-2">
+          {(location || locationLoading) && (
+            <p className="font-mono text-sm leading-snug text-text-primary" title={location ?? undefined}>
+              {locationLoading ? '…' : location}
+            </p>
+          )}
+          <p className="font-mono text-sm text-accent">
+            {formatCoords(effectiveLat, effectiveLng)}
+          </p>
+        </div>
 
         <div
           onDragOver={(e) => {
@@ -175,7 +238,13 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            if (imageDataUrl) {
+              setImagePreviewOpen(true);
+            } else {
+              fileInputRef.current?.click();
+            }
+          }}
           className={`mt-4 flex min-h-[120px] aspect-video w-full cursor-pointer touch-target flex-col items-center justify-center rounded border-2 border-dashed transition-colors ${
             dragOver ? 'border-accent bg-accent-glow' : 'border-border bg-surface-elevated'
           }`}
@@ -191,7 +260,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
             <img
               src={imageDataUrl}
               alt="Preview"
-              className="h-full w-full rounded object-cover"
+              className="h-full w-full rounded object-cover pointer-events-none"
             />
           ) : (
             <span className="font-mono text-sm text-text-muted">
@@ -202,15 +271,99 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
             <p className="mt-2 font-mono text-xs text-danger">{uploadError}</p>
           )}
         </div>
+        {imagePreviewOpen && imageDataUrl && (
+          <>
+            <div
+              className="fixed inset-0 z-[1102] bg-background/80 backdrop-blur-sm"
+              onClick={() => setImagePreviewOpen(false)}
+              aria-hidden
+            />
+            <div
+              className="fixed inset-0 z-[1103] flex items-center justify-center p-4"
+              onClick={() => setImagePreviewOpen(false)}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Image preview"
+            >
+              <div
+                className="relative max-h-[85vh] max-w-[90vw] overflow-hidden rounded-lg border border-border bg-surface shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <img
+                  src={imageDataUrl}
+                  alt="Preview"
+                  className="max-h-[85vh] max-w-full object-contain"
+                />
+                <div className="flex flex-wrap gap-2 border-t border-border bg-surface p-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImagePreviewOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="font-mono touch-target min-h-[40px] px-3 text-sm text-accent underline-offset-2 hover:underline"
+                  >
+                    Change photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImagePreviewOpen(false)}
+                    className="font-mono touch-target min-h-[40px] px-3 text-sm text-text-secondary hover:text-text-primary"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Name this memory..."
-          className="font-display mt-6 w-full border-none bg-transparent text-xl text-text-primary placeholder-text-muted outline-none md:text-2xl"
-          style={{ fontSize: 'min(1.25rem, 5vw)' }}
-        />
+        <div className="mt-6 flex items-center gap-3">
+          <div className="relative flex h-10 w-10 flex-shrink-0 md:h-12 md:w-12">
+            <button
+              ref={iconButtonRef}
+              type="button"
+              onClick={() => setEmojiPickerOpen((o) => !o)}
+              className="flex h-full w-full items-center justify-center rounded-lg bg-surface-elevated text-xl font-semibold text-text-secondary transition-colors hover:bg-surface hover:text-accent md:text-2xl md:font-bold"
+              title="Click to choose emoji"
+              aria-label="Choose emoji"
+            >
+              {customLabel.trim() || '☺'}
+            </button>
+            {emojiPickerOpen &&
+              emojiPickerRect &&
+              createPortal(
+                <div
+                  ref={emojiPickerRef}
+                  className="fixed z-[1110] rounded-lg border border-border bg-surface shadow-xl"
+                  style={{ top: emojiPickerRect.top, left: emojiPickerRect.left }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <EmojiPicker
+                    theme={Theme.DARK}
+                    emojiStyle={EmojiStyle.GOOGLE}
+                    searchPlaceHolder="Search emoji"
+                    onEmojiClick={(emojiData: EmojiClickData) => {
+                      setCustomLabel(emojiData.emoji);
+                      setEmojiPickerOpen(false);
+                    }}
+                    width={320}
+                    height={360}
+                    previewConfig={{ showPreview: false }}
+                  />
+                </div>,
+                document.body
+              )}
+          </div>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Name this memory..."
+            className="font-display min-w-0 flex-1 border-none bg-transparent text-xl font-semibold text-text-primary placeholder-text-muted outline-none md:text-2xl md:font-bold"
+            style={{ fontSize: 'min(1.25rem, 5vw)' }}
+          />
+        </div>
 
         <input
           type="date"
@@ -227,20 +380,22 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
             <button
               type="button"
               onClick={() => setGroupDropdownOpen((o) => !o)}
-              className="font-mono w-full min-h-[44px] touch-target flex items-center justify-between gap-2 border-b border-border bg-surface-elevated/50 py-3 pl-0 pr-2 text-left text-base text-text-primary outline-none transition-colors hover:bg-surface-elevated md:py-2 md:text-sm"
+              className="font-mono w-full min-h-[44px] touch-target flex items-center justify-between gap-3 border-b border-border bg-surface-elevated/50 py-3 pl-3 pr-3 text-left text-base text-text-primary outline-none transition-colors hover:bg-surface-elevated md:py-2 md:text-sm"
               aria-expanded={groupDropdownOpen}
               aria-haspopup="listbox"
               aria-label="Select group"
             >
-              <span>{groupId ? groups.find((g) => g.id === groupId)?.name ?? 'Ungrouped' : 'Ungrouped'}</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`shrink-0 transition-transform ${groupDropdownOpen ? 'rotate-180' : ''}`}>
+              <span className="min-w-0 flex-1 truncate text-left">
+                {groupId ? groups.find((g) => g.id === groupId)?.name ?? 'Ungrouped' : 'Ungrouped'}
+              </span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`shrink-0 transition-transform ${groupDropdownOpen ? 'rotate-180' : ''}`} aria-hidden>
                 <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
             {groupDropdownOpen && (
               <ul
                 role="listbox"
-                className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded border border-border bg-surface shadow-lg"
+                className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded border border-border bg-surface shadow-lg py-1"
               >
                 <li role="option" aria-selected={!groupId}>
                   <button
@@ -249,7 +404,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
                       setGroupId(null);
                       setGroupDropdownOpen(false);
                     }}
-                    className={`font-mono w-full min-h-[44px] touch-target px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-elevated focus:outline-none ${!groupId ? 'bg-surface-elevated text-accent' : 'text-text-primary'}`}
+                    className={`font-mono w-full min-h-[44px] touch-target py-2.5 pl-3 pr-3 text-left text-sm transition-colors hover:bg-surface-elevated focus:outline-none ${!groupId ? 'bg-surface-elevated text-accent' : 'text-text-primary'}`}
                   >
                     Ungrouped
                   </button>
@@ -262,12 +417,27 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
                         setGroupId(g.id);
                         setGroupDropdownOpen(false);
                       }}
-                      className={`font-mono w-full min-h-[44px] touch-target px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-elevated focus:outline-none ${groupId === g.id ? 'bg-surface-elevated text-accent' : 'text-text-primary'}`}
+                      className={`font-mono w-full min-h-[44px] touch-target py-2.5 pl-3 pr-3 text-left text-sm transition-colors hover:bg-surface-elevated focus:outline-none ${groupId === g.id ? 'bg-surface-elevated text-accent' : 'text-text-primary'}`}
                     >
                       {g.name}
                     </button>
                   </li>
                 ))}
+                <li className="border-t border-border mt-1 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = crypto.randomUUID();
+                      addGroup({ id, name: 'New group', collapsed: false });
+                      setGroupId(id);
+                      setDefaultGroupId(id);
+                      setGroupDropdownOpen(false);
+                    }}
+                    className="font-mono w-full min-h-[44px] touch-target py-2.5 pl-3 pr-3 text-left text-sm text-accent transition-colors hover:bg-surface-elevated focus:outline-none"
+                  >
+                    + New group
+                  </button>
+                </li>
               </ul>
             )}
           </div>
@@ -281,7 +451,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
           className="font-body mt-4 w-full resize-none border-none bg-transparent text-base text-text-primary placeholder-text-muted outline-none"
         />
 
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={handleSave}
@@ -289,16 +459,34 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
           >
             {isEdit ? 'SAVE CHANGES' : 'ARCHIVE MEMORY'}
           </button>
-          <button
-            type="button"
-            onClick={handleDiscard}
-            className="font-mono touch-target min-h-[44px] flex-1 py-3 text-sm text-text-muted transition-colors hover:text-text-secondary active:opacity-80 md:flex-none md:py-2.5"
-          >
-            DISCARD
-          </button>
+          {isEdit && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="touch-target flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center text-text-muted transition-colors hover:text-danger"
+              aria-label="Delete memory"
+              title="Delete memory"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                <path d="M10 11v6M14 11v6" />
+              </svg>
+            </button>
+          )}
         </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete memory"
+        message={editingMemory ? `Delete "${editingMemory.title || 'Untitled'}" from the atlas?` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
+        zIndex={1200}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </>
   );
 }

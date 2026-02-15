@@ -1,87 +1,82 @@
 # Memory Atlas V3
 
-React + TypeScript + Vite app: map-based memory journal with groups and timeline.
-
-## Deploy to GitHub Pages (recommended: GitHub Actions)
-
-1. **One-time setup:** In your repo go to **Settings** → **Pages** → under **Build and deployment**, set **Source** to **GitHub Actions** (not "Deploy from a branch"). Save.
-2. **Push this repo** (including the `.github/workflows/deploy-pages.yml` file) to the `main` branch. The workflow will build the app and deploy it to GitHub Pages.
-3. After the action finishes (check the **Actions** tab), open: `https://<your-username>.github.io/Memory-Atlas-V3/`
-
-Every push to `main` will rebuild and redeploy automatically. No need to run `build:pages` or commit the `docs` folder.
-
-**Alternative (manual):** Run `npm run build:pages`, commit and push the `docs` folder, then set **Settings** → **Pages** → Source: **Deploy from a branch** → Branch: **main** → Folder: **/docs**.
+A **map-based memory journal** that lets you pin life moments to places, organize them in groups, and explore them on a timeline—all in the browser, with no account required.
 
 ---
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## What is this project?
 
-Currently, two official plugins are available:
+**Memory Atlas** is a personal, location-aware journal. You add “memories” by clicking on a map: each memory has a title, date, notes, and an optional photo, tied to a latitude/longitude. Memories can be grouped (e.g. “Trip to Japan”, “2024”), reordered, and hidden. A sidebar lists everything; a timeline view (when enabled) draws a line connecting memories in order. Data is stored in your browser (localStorage) via Zustand persist—private and offline-capable.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## What it does
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Map-based journaling** — Click anywhere on the map to add a memory at that location. Edit or delete from the sidebar or by opening a memory.
+- **Groups** — Create groups, assign memories to them, collapse/expand and reorder. Drag-and-drop to reorder memories within a group.
+- **Timeline** — Toggle a polyline on the map that connects memories in sidebar order (by group and order), so you can see a “path” through your memories.
+- **Search** — Filter memories by title, notes, or date. Search can highlight a point or area on the map.
+- **Photos** — Attach one image per memory (stored as compressed data URLs).
+- **Light/dark theme** — UI and map tiles (e.g. CartoDB) switch with your preference.
+- **Responsive** — Sidebar and controls adapt to smaller screens; map remains central.
+- **Persistence** — Memories and groups are saved in the browser; no backend or login.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Why it’s important
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **Place and time together** — Many journals are either date-based or tag-based. Memory Atlas ties entries to real geography, so you can see *where* things happened and how places relate.
+- **Privacy-first** — Everything stays in your browser. No sign-up, no server storing your data, no tracking.
+- **Simple and focused** — No social features or clutter; it’s a single-user tool for reflecting on places and moments.
+- **Reusable and hackable** — Built with standard web tech (React, TypeScript, Leaflet, Vite), so you can run it locally, deploy to GitHub Pages, or extend it for your own use.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## How it’s built
+
+### Stack
+
+- **React 19** + **TypeScript** — UI and type-safe state.
+- **Vite 7** — Dev server, HMR, and production builds.
+- **Zustand** — Global state (memories, groups, UI flags) with `persist` middleware for localStorage.
+- **Leaflet** + **react-leaflet** — Interactive map; **react-leaflet-cluster** for marker clustering when zoomed out.
+- **Tailwind CSS 4** — Styling and theming (CSS variables for light/dark).
+- **No backend** — All data in the client; optional deploy to static hosting (e.g. GitHub Pages).
+
+### Project structure (high level)
+
+- `src/`
+  - `App.tsx` — Root layout, modals (add/edit memory, memory viewer), theme and overlay behavior.
+  - `components/` — `MapView`, `Sidebar`, `AddMemoryModal`, `MemoryViewer`, `MemoryMarker`, `MemoryHoverCard`, `LocationSearch`, `SearchBar`, `ConfirmDialog`, `ThemeToggle`, `TimelineToggle`, `ErrorBoundary`, etc.
+  - `store/memoryStore.ts` — Zustand store: memories, groups, selection, search, theme, timeline toggle, persistence config.
+  - `context/MapContext.tsx` — React context holding the Leaflet map instance for programmatic control (e.g. flyTo for search).
+  - `types/memory.ts` — `Memory`, `Group`, `PendingLatLng`.
+  - `utils/` — `formatDate`, `formatCoords`, `memoryOrder`, `memoryLabel`, `timelineCurve`, `imageUtils`, etc.
+  - `hooks/` — `useFocusTrap`, `useMediaQuery`, etc.
+- `public/` — Static assets (e.g. 404 page for SPA routing on GitHub Pages).
+- `scripts/copy-to-docs.cjs` — Optional script to copy build output to `docs/` for branch-based GitHub Pages.
+- **Base path** — Vite is configured with `base: '/Memory-Atlas-V3/'` for GitHub Pages repo deployment.
+
+### Run and build
+
+```bash
+npm install
+npm run dev      # Development
+npm run build    # Production build (output in dist/)
+npm run preview  # Preview production build locally
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Deploy to GitHub Pages
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+**Recommended: GitHub Actions**
+
+1. In the repo go to **Settings** → **Pages** → under **Build and deployment**, set **Source** to **GitHub Actions**. Save.
+2. Push the repo (including `.github/workflows/deploy-pages.yml`) to `main`. The workflow will build the app and deploy to GitHub Pages.
+3. After the action completes (see the **Actions** tab), open:  
+   `https://<your-username>.github.io/Memory-Atlas-V3/`
+
+Each push to `main` will rebuild and redeploy. You don’t need to run `build:pages` or commit the `docs` folder.
+
+**Manual alternative:** Run `npm run build:pages`, commit and push the `docs` folder, then in **Settings** → **Pages** set Source to **Deploy from a branch** → Branch: **main** → Folder: **/docs**.

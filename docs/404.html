@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0;url=/Memory-Atlas-V3/" />
-  <script>window.location.replace('/Memory-Atlas-V3/' + (window.location.search || '') + (window.location.hash || ''));</script>
+  <script>
+    var base = location.pathname.replace(/\/[^/]*$/, '/') || '/';
+    location.replace(base + (location.search || '') + (location.hash || ''));
+  </script>
   <title>Redirecting…</title>
 </head>
 <body>
-  <p>Redirecting to <a href="/Memory-Atlas-V3/">Memory Atlas</a>…</p>
+  <p>Redirecting…</p>
 </body>
 </html>

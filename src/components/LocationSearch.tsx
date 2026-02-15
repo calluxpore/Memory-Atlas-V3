@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMapRef } from '../context/MapContext';
 import { useMemoryStore } from '../store/memoryStore';
+import type { SearchHighlightBbox } from '../store/memoryStore';
 
+/** [south, north, west, east] - when present and not a tiny box, treat as area. */
 export interface GeoResult {
   lat: number;
   lng: number;
   display_name: string;
+  bbox?: SearchHighlightBbox;
 }
 
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
@@ -37,11 +40,26 @@ async function searchNominatim(query: string): Promise<GeoResult[]> {
   if (!res.ok) return [];
   const data = await res.json();
   if (!Array.isArray(data)) return [];
-  return data.map((r: { place_id: number; lat: string; lon: string; display_name: string }) => ({
-    lat: parseFloat(r.lat),
-    lng: parseFloat(r.lon),
-    display_name: r.display_name,
-  }));
+  return data.map(
+    (r: {
+      place_id: number;
+      lat: string;
+      lon: string;
+      display_name: string;
+      boundingbox?: string[];
+    }) => {
+      const lat = parseFloat(r.lat);
+      const lng = parseFloat(r.lon);
+      let bbox: SearchHighlightBbox | undefined;
+      if (Array.isArray(r.boundingbox) && r.boundingbox.length >= 4) {
+        const [s, n, w, e] = r.boundingbox.map(Number);
+        const latSpan = n - s;
+        const lngSpan = e - w;
+        if (latSpan > 0.0001 || lngSpan > 0.0001) bbox = [s, n, w, e];
+      }
+      return { lat, lng, display_name: r.display_name, bbox };
+    }
+  );
 }
 
 interface PhotonFeature {
@@ -83,8 +101,7 @@ async function searchLocation(query: string): Promise<{ results: GeoResult[]; er
 
 export function LocationSearch() {
   const map = useMapRef();
-  const setPendingLatLng = useMemoryStore((s) => s.setPendingLatLng);
-  const setIsAddingMemory = useMemoryStore((s) => s.setIsAddingMemory);
+  const setSearchHighlight = useMemoryStore((s) => s.setSearchHighlight);
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeoResult[]>([]);
@@ -134,17 +151,31 @@ export function LocationSearch() {
 
   const handleSelect = useCallback(
     (result: GeoResult) => {
-      setPendingLatLng({ lat: result.lat, lng: result.lng });
-      setIsAddingMemory(true);
+      const highlight =
+        result.bbox != null
+          ? { type: 'area' as const, bbox: result.bbox }
+          : { type: 'point' as const, lat: result.lat, lng: result.lng };
+      setSearchHighlight(highlight);
       setQuery('');
       setResults([]);
       setError(null);
       setOpen(false);
       if (map) {
-        map.flyTo([result.lat, result.lng], 14, { duration: 0.6 });
+        if (result.bbox != null) {
+          const [south, north, west, east] = result.bbox;
+          map.flyToBounds(
+            [
+              [south, west],
+              [north, east],
+            ],
+            { padding: [40, 40], duration: 0.6, maxZoom: 16 }
+          );
+        } else {
+          map.flyTo([result.lat, result.lng], 14, { duration: 0.6 });
+        }
       }
     },
-    [map, setPendingLatLng, setIsAddingMemory]
+    [map, setSearchHighlight]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -182,9 +213,9 @@ export function LocationSearch() {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder="Search a location to pin a memory..."
+          placeholder="Search a location..."
           className="font-mono w-full min-h-[44px] touch-target rounded border border-border bg-surface/95 py-3 pl-4 pr-12 text-base text-text-primary placeholder-text-muted outline-none backdrop-blur-sm focus:border-accent md:py-2.5 md:text-sm"
-          aria-label="Search location to pin a memory"
+          aria-label="Search location"
           aria-autocomplete="list"
           aria-expanded={showDropdown}
         />

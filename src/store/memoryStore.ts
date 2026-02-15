@@ -2,6 +2,14 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Memory, PendingLatLng, Group } from '../types/memory';
 
+/** [south, north, west, east] */
+export type SearchHighlightBbox = [number, number, number, number];
+
+export type SearchHighlight =
+  | { type: 'point'; lat: number; lng: number }
+  | { type: 'area'; bbox: SearchHighlightBbox }
+  | null;
+
 interface MemoryState {
   memories: Memory[];
   groups: Group[];
@@ -9,6 +17,7 @@ interface MemoryState {
   editingMemory: Memory | null;
   isAddingMemory: boolean;
   pendingLatLng: PendingLatLng | null;
+  searchHighlight: SearchHighlight;
   sidebarOpen: boolean;
   searchQuery: string;
   theme: 'dark' | 'light';
@@ -21,6 +30,7 @@ interface MemoryState {
   setEditingMemory: (memory: Memory | null) => void;
   setIsAddingMemory: (value: boolean) => void;
   setPendingLatLng: (value: PendingLatLng | null) => void;
+  setSearchHighlight: (value: SearchHighlight) => void;
   setSidebarOpen: (value: boolean) => void;
   setSearchQuery: (value: string) => void;
   setTheme: (theme: 'dark' | 'light') => void;
@@ -39,6 +49,7 @@ export const useMemoryStore = create<MemoryState>()(
       editingMemory: null,
       isAddingMemory: false,
       pendingLatLng: null,
+      searchHighlight: null,
       sidebarOpen: true,
       searchQuery: '',
       theme: 'dark',
@@ -103,6 +114,8 @@ export const useMemoryStore = create<MemoryState>()(
       setIsAddingMemory: (isAddingMemory) => set({ isAddingMemory }),
 
       setPendingLatLng: (pendingLatLng) => set({ pendingLatLng }),
+
+      setSearchHighlight: (searchHighlight) => set({ searchHighlight }),
 
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
 

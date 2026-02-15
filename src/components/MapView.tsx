@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, CircleMarker, Rectangle, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useMemoryStore } from '../store/memoryStore';
@@ -7,6 +7,7 @@ import { MemoryMarker } from './MemoryMarker';
 import { MemoryHoverCard } from './MemoryHoverCard';
 import { SetMapRef } from './SetMapRef';
 import type { Memory } from '../types/memory';
+import type { SearchHighlight } from '../store/memoryStore';
 
 function ZoomControlPlacement() {
   const map = useMap();
@@ -40,9 +41,15 @@ const TILE_URL_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{
 
 function MapClickHandler({
   onMapClick,
+  onMapMouseMove,
+  onMapDragStart,
+  onMapZoomStart,
   mapBlurred,
 }: {
   onMapClick: (latlng: L.LatLng) => void;
+  onMapMouseMove?: (e: L.LeafletMouseEvent) => void;
+  onMapDragStart?: () => void;
+  onMapZoomStart?: () => void;
   mapBlurred: boolean;
 }) {
   const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null);
@@ -57,6 +64,9 @@ function MapClickHandler({
       onMapClick(e.latlng);
       setTimeout(() => setRipple(null), 650);
     },
+    mousemove: (e) => onMapMouseMove?.(e),
+    dragstart: () => onMapDragStart?.(),
+    zoomstart: () => onMapZoomStart?.(),
     mouseover: () => {
       hoverTimeoutRef.current = setTimeout(() => setHoverTooltip(true), 1000);
     },
@@ -97,19 +107,29 @@ function MapClickHandler({
   );
 }
 
+const SEARCH_HIGHLIGHT_BLUE = '#3b82f6';
+
 function MapContent({
   memories,
   pendingLatLng,
+  searchHighlight,
   mapBlurred,
   onMapClick,
+  onMapMouseMove,
+  onMapDragStart,
+  onMapZoomStart,
   visibleMemoryIds,
   onMarkerHover,
   onMarkerHoverOut,
 }: {
   memories: Memory[];
   pendingLatLng: { lat: number; lng: number } | null;
+  searchHighlight: SearchHighlight;
   mapBlurred: boolean;
   onMapClick: (latlng: L.LatLng) => void;
+  onMapMouseMove?: (e: L.LeafletMouseEvent) => void;
+  onMapDragStart?: () => void;
+  onMapZoomStart?: () => void;
   visibleMemoryIds: Set<string>;
   onMarkerHover: (memory: Memory, point: L.Point) => void;
   onMarkerHoverOut: () => void;
@@ -117,7 +137,44 @@ function MapContent({
   const visible = memories.filter((m) => visibleMemoryIds.has(m.id));
   return (
     <>
-      <MapClickHandler onMapClick={onMapClick} mapBlurred={mapBlurred} />
+      <MapClickHandler
+        onMapClick={onMapClick}
+        onMapMouseMove={onMapMouseMove}
+        onMapDragStart={onMapDragStart}
+        onMapZoomStart={onMapZoomStart}
+        mapBlurred={mapBlurred}
+      />
+      {searchHighlight?.type === 'point' && (
+        <CircleMarker
+          center={[searchHighlight.lat, searchHighlight.lng]}
+          radius={10}
+          pathOptions={{
+            color: SEARCH_HIGHLIGHT_BLUE,
+            fillColor: SEARCH_HIGHLIGHT_BLUE,
+            fillOpacity: 0.9,
+            weight: 2,
+            interactive: false,
+          }}
+          zIndexOffset={400}
+        />
+      )}
+      {searchHighlight?.type === 'area' && (
+        <Rectangle
+          bounds={[
+            [searchHighlight.bbox[0], searchHighlight.bbox[2]],
+            [searchHighlight.bbox[1], searchHighlight.bbox[3]],
+          ]}
+          pathOptions={{
+            color: SEARCH_HIGHLIGHT_BLUE,
+            fillColor: SEARCH_HIGHLIGHT_BLUE,
+            fillOpacity: 0.25,
+            weight: 2,
+            dashArray: '8 6',
+            interactive: false,
+          }}
+          zIndexOffset={400}
+        />
+      )}
       {pendingLatLng && (
         <Marker
           position={[pendingLatLng.lat, pendingLatLng.lng]}
@@ -165,8 +222,10 @@ export function MapView() {
   const groups = useMemoryStore((s) => s.groups);
   const theme = useMemoryStore((s) => s.theme);
   const pendingLatLng = useMemoryStore((s) => s.pendingLatLng);
+  const searchHighlight = useMemoryStore((s) => s.searchHighlight);
   const isAddingMemory = useMemoryStore((s) => s.isAddingMemory);
   const setPendingLatLng = useMemoryStore((s) => s.setPendingLatLng);
+  const setSearchHighlight = useMemoryStore((s) => s.setSearchHighlight);
   const setIsAddingMemory = useMemoryStore((s) => s.setIsAddingMemory);
 
   const mapBlurred = isAddingMemory;
@@ -184,12 +243,23 @@ export function MapView() {
   );
   const tileUrl = theme === 'light' ? TILE_URL_LIGHT : TILE_URL_DARK;
 
+  const closeHoverCard = useCallback(() => {
+    if (hoverHideTimeoutRef.current) {
+      clearTimeout(hoverHideTimeoutRef.current);
+      hoverHideTimeoutRef.current = null;
+    }
+    setHoveredMemory(null);
+    setHoverPoint(null);
+  }, []);
+
   const onMapClick = useCallback(
     (latlng: L.LatLng) => {
+      closeHoverCard();
+      setSearchHighlight(null);
       setPendingLatLng({ lat: latlng.lat, lng: latlng.lng });
       setIsAddingMemory(true);
     },
-    [setPendingLatLng, setIsAddingMemory]
+    [closeHoverCard, setSearchHighlight, setPendingLatLng, setIsAddingMemory]
   );
 
   const onMarkerHover = useCallback(
@@ -212,6 +282,21 @@ export function MapView() {
       hoverHideTimeoutRef.current = null;
     }, HOVER_HIDE_DELAY_MS);
   }, []);
+
+  const onMapMouseMove = useCallback((e: L.LeafletMouseEvent) => {
+    const target = e.originalEvent?.target as HTMLElement | undefined;
+    if (!target?.closest?.('.memory-marker-wrapper')) {
+      if (hoverHideTimeoutRef.current) clearTimeout(hoverHideTimeoutRef.current);
+      hoverHideTimeoutRef.current = setTimeout(() => {
+        setHoveredMemory(null);
+        setHoverPoint(null);
+        hoverHideTimeoutRef.current = null;
+      }, HOVER_HIDE_DELAY_MS);
+    }
+  }, []);
+
+  const onMapDragStart = useCallback(() => closeHoverCard(), [closeHoverCard]);
+  const onMapZoomStart = useCallback(() => closeHoverCard(), [closeHoverCard]);
 
   const onCardMouseEnter = useCallback(() => {
     if (hoverHideTimeoutRef.current) {
@@ -241,8 +326,8 @@ export function MapView() {
         ref={(r) => {
           mapRef.current = r ?? null;
         }}
-        center={[20, 0]}
-        zoom={2}
+        center={[43.6532, -79.3832]}
+        zoom={11}
         className="h-full w-full animate-map-in opacity-0"
         style={{ cursor: 'crosshair' }}
         zoomControl={false}
@@ -253,8 +338,12 @@ export function MapView() {
         <MapContent
           memories={memories}
           pendingLatLng={pendingLatLng}
+          searchHighlight={searchHighlight}
           mapBlurred={mapBlurred}
           onMapClick={onMapClick}
+          onMapMouseMove={onMapMouseMove}
+          onMapDragStart={onMapDragStart}
+          onMapZoomStart={onMapZoomStart}
           visibleMemoryIds={visibleMemoryIds}
           onMarkerHover={onMarkerHover}
           onMarkerHoverOut={onMarkerHoverOut}

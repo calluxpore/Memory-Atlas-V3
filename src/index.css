@@ -10,10 +10,10 @@
   --color-border: #2a2a32;
   --color-accent: #c8a96e;
   --color-accent-glow: rgba(200, 169, 110, 0.15);
-  --color-text-primary: #f0ede6;
-  --color-text-secondary: #6b6872;
-  --color-text-muted: #3d3b44;
-  --color-danger: #8b3a3a;
+  --color-text-primary: #f5f4f0;
+  --color-text-secondary: #b5b2b8;
+  --color-text-muted: #8c8994;
+  --color-danger: #c45c5c;
 }
 
 :root {
@@ -23,10 +23,10 @@
   --color-border: #2a2a32;
   --color-accent: #c8a96e;
   --color-accent-glow: rgba(200, 169, 110, 0.15);
-  --color-text-primary: #f0ede6;
-  --color-text-secondary: #6b6872;
-  --color-text-muted: #3d3b44;
-  --color-danger: #8b3a3a;
+  --color-text-primary: #f5f4f0;
+  --color-text-secondary: #b5b2b8;
+  --color-text-muted: #8c8994;
+  --color-danger: #c45c5c;
   /* Match CartoDB dark water so map and outer area look seamless */
   --color-map-water: #1a1b1a;
 }

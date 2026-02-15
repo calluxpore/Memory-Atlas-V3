@@ -320,20 +320,42 @@ export function Sidebar() {
         ref={panelRef}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`absolute left-0 bottom-0 z-[800] flex h-[50vh] max-h-[85vh] w-full flex-col rounded-t-lg border-t border-border bg-background/95 shadow-lg backdrop-blur-[20px] transition-transform duration-300 md:bottom-auto md:top-0 md:h-full md:max-h-none md:w-[320px] md:rounded-none md:border-t-0 md:border-r ${
+        className={`absolute left-0 bottom-0 z-[800] flex h-[50vh] max-h-[85vh] w-full flex-col rounded-t-lg border-t border-border bg-background/95 shadow-lg backdrop-blur-[20px] transition-transform duration-300 md:bottom-0 md:top-0 md:h-full md:min-h-full md:max-h-none md:w-[320px] md:rounded-none md:border-t-0 md:border-r ${
           sidebarOpen
             ? 'translate-y-0 md:translate-x-0'
             : 'translate-y-full md:translate-y-0 md:-translate-x-full'
         }`}
         style={{
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          maxHeight: 'calc(85vh - env(safe-area-inset-bottom, 0px))',
         }}
       >
         <div className="flex flex-col gap-2 border-b border-border p-4">
-          <h1 className="font-display text-xl font-semibold tracking-tight text-text-primary">
-            MEMORY ATLAS<sup className="font-mono text-xs text-text-secondary"> V3</sup>
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-display min-w-0 flex-1 text-xl font-semibold tracking-tight text-text-primary">
+              MEMORY ATLAS<sup className="font-mono text-xs text-text-secondary"> V3</sup>
+            </h1>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSidebarOpen(!sidebarOpen);
+              }}
+              className="touch-target flex h-9 w-9 flex-shrink-0 items-center justify-center rounded border border-border bg-surface/80 text-text-secondary transition-colors hover:bg-surface-elevated hover:text-accent active:scale-95"
+              aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className={`transition-transform ${sidebarOpen ? '' : 'rotate-180'}`}
+              >
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+          </div>
           <div className="h-px bg-accent/40" />
           <SearchBar />
         </div>
@@ -402,29 +424,21 @@ export function Sidebar() {
           </p>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setSidebarOpen(!sidebarOpen);
-        }}
-        className={`absolute left-0 top-1/2 z-[801] flex h-14 min-h-[44px] w-10 min-w-[44px] touch-target -translate-y-1/2 items-center justify-center rounded-r border border-l-0 border-border bg-surface/90 text-text-secondary backdrop-blur-sm transition-all hover:bg-surface-elevated hover:text-accent active:scale-95 md:h-12 md:w-6 ${
-          sidebarOpen ? 'md:left-[320px]' : ''
-        }`}
-        aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-      >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          className={`transition-transform ${sidebarOpen ? '' : 'rotate-180'}`}
+      {!sidebarOpen && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSidebarOpen(true);
+          }}
+          className="absolute left-4 top-4 z-[801] flex h-9 w-9 items-center justify-center rounded border border-border bg-surface/90 text-text-secondary backdrop-blur-sm transition-colors hover:bg-surface-elevated hover:text-accent active:scale-95"
+          aria-label="Open sidebar"
         >
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </button>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="rotate-180">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+      )}
     </>
   );
 }

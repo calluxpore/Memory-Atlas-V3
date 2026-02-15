@@ -1,4 +1,18 @@
-# React + TypeScript + Vite
+# Memory Atlas V3
+
+React + TypeScript + Vite app: map-based memory journal with groups and timeline.
+
+## Deploy to GitHub Pages (via GitHub Desktop)
+
+1. **Build for Pages** (in terminal): `npm run build:pages`  
+   This builds the app and copies the output into the `docs` folder.
+2. **Commit and push** in GitHub Desktop: include the `docs` folder (and any other changes).
+3. **GitHub repo** → **Settings** → **Pages** → Source: **Deploy from a branch** → Branch: **main** → Folder: **/docs** → Save.
+4. Site URL: `https://<your-username>.github.io/Memory-Atlas-V3/`
+
+When you update the app, run `npm run build:pages` again, then commit and push the updated `docs` folder.
+
+---
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

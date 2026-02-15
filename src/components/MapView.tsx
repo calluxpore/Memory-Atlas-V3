@@ -9,7 +9,7 @@ import { useMemoryStore } from '../store/memoryStore';
 import { MemoryMarker } from './MemoryMarker';
 import { MemoryHoverCard } from './MemoryHoverCard';
 import { SetMapRef } from './SetMapRef';
-import type { Memory } from '../types/memory';
+import type { Memory, Group } from '../types/memory';
 import type { SearchHighlight } from '../store/memoryStore';
 import { getMemoryLabel } from '../utils/memoryLabel';
 import { memoriesInSidebarOrder, compareOrderThenCreatedAt } from '../utils/memoryOrder';
@@ -138,7 +138,7 @@ function MapContent({
   onMarkerHoverOut,
 }: {
   memories: Memory[];
-  groups: { id: string; hidden?: boolean }[];
+  groups: Group[];
   pendingLatLng: { lat: number; lng: number } | null;
   searchHighlight: SearchHighlight;
   timelineEnabled: boolean;
@@ -199,7 +199,6 @@ function MapContent({
             weight: 2,
             interactive: false,
           }}
-          zIndexOffset={400}
         />
       )}
       {searchHighlight?.type === 'area' && (
@@ -216,7 +215,6 @@ function MapContent({
             dashArray: '8 6',
             interactive: false,
           }}
-          zIndexOffset={400}
         />
       )}
       {timelinePaths.map((positions, i) => (
@@ -243,7 +241,7 @@ function MapContent({
         />
       )}
       <MarkerClusterGroup
-        iconCreateFunction={(cluster) => {
+        iconCreateFunction={(cluster: { getChildCount: () => number }) => {
           const count = cluster.getChildCount();
           return L.divIcon({
             html: `<span class="memory-cluster-count">${count}</span>`,

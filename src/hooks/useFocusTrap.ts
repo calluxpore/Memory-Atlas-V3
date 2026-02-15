@@ -20,10 +20,12 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
-      const current = document.activeElement as HTMLElement | null;
+      const current = document.activeElement;
+      if (!current || !(current instanceof HTMLElement)) return;
       if (!el.contains(current)) {
         e.preventDefault();
-        focusable[0]?.focus();
+        const firstEl = focusable[0];
+        if (firstEl) firstEl.focus();
         return;
       }
       const idx = focusable.indexOf(current);
@@ -31,18 +33,21 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
       if (e.shiftKey) {
         if (idx === 0) {
           e.preventDefault();
-          focusable[focusable.length - 1]?.focus();
+          const lastEl = focusable[focusable.length - 1];
+          if (lastEl) lastEl.focus();
         }
       } else {
         if (idx === focusable.length - 1) {
           e.preventDefault();
-          focusable[0]?.focus();
+          const firstEl = focusable[0];
+          if (firstEl) firstEl.focus();
         }
       }
     };
 
     el.addEventListener('keydown', handleKeyDown);
-    focusable[0]?.focus();
+    const first = focusable[0];
+    if (first) first.focus();
     return () => el.removeEventListener('keydown', handleKeyDown);
   }, [active, containerRef]);
 }

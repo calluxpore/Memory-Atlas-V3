@@ -71,9 +71,9 @@ export const useMemoryStore = create<MemoryState>()(
       setMemories: (memories) => set({ memories }),
 
       setSidebarWidth: (width) =>
-        set((state) => ({
+        set({
           sidebarWidth: Math.min(560, Math.max(240, width)),
-        })),
+        }),
 
       addMemory: (memory) =>
         set((state) => ({

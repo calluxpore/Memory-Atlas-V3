@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: 'Cormorant Garamond', serif;
-  --font-mono: 'DM Mono', monospace;
-  --font-body: 'Lora', serif;
+  --font-display: 'Roboto Slab', 'Roboto', sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, monospace;
+  --font-body: 'Roboto', sans-serif;
   --color-background: #0a0a0b;
   --color-surface: #111114;
   --color-surface-elevated: #1a1a1f;
@@ -57,7 +57,7 @@ body,
   overflow: hidden;
   background: var(--color-background);
   color: var(--color-text-primary);
-  font-family: 'Lora', serif;
+  font-family: 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
@@ -202,7 +202,7 @@ body,
 
 .memory-marker-label {
   flex-shrink: 0;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 20px;
   font-weight: 600;
   line-height: 1;
@@ -247,7 +247,7 @@ body,
   bottom: 100%;
   transform: translateX(-50%) translateY(-8px);
   padding: 4px 8px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-primary);
   background: var(--color-surface-elevated);

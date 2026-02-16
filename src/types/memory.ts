@@ -5,7 +5,10 @@ export interface Memory {
   title: string;
   date: string;
   notes: string;
-  imageDataUrl: string | null;
+  /** @deprecated Use imageDataUrls; first image is imageDataUrls?.[0] ?? imageDataUrl */
+  imageDataUrl?: string | null;
+  /** Multiple images per memory (data URLs). When set, imageDataUrl is ignored for display. */
+  imageDataUrls?: string[];
   createdAt: string;
   /** Optional for backward compatibility with saved data; treat missing as null. */
   groupId?: string | null;
@@ -15,6 +18,12 @@ export interface Memory {
   order?: number;
   /** Custom icon/emoji label (1–3 chars). When set, overrides the default A/B/C label on sidebar and map. */
   customLabel?: string | null;
+  /** Tags for filtering (e.g. "food", "travel", "family"). */
+  tags?: string[];
+  /** When true, memory appears in Favorites quick-access. */
+  starred?: boolean;
+  /** Attached URLs (articles, songs, places). */
+  links?: string[];
 }
 
 export interface Group {

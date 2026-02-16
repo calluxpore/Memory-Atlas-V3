@@ -1,4 +1,5 @@
 import { formatDate } from '../utils/formatDate';
+import { getMemoryImages } from '../utils/imageUtils';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
 import type { Memory } from '../types/memory';
 
@@ -19,6 +20,7 @@ export function MemoryHoverCard({
   onClick,
 }: MemoryHoverCardProps) {
   const { location, loading: locationLoading } = useReverseGeocode(memory.lat, memory.lng);
+  const firstImage = getMemoryImages(memory)[0] ?? null;
   const notesPreview = memory.notes?.trim()
     ? memory.notes.trim().slice(0, 80) + (memory.notes.length > 80 ? '…' : '')
     : null;
@@ -38,10 +40,10 @@ export function MemoryHoverCard({
       onMouseLeave={onMouseLeave}
       onClick={onClick}
     >
-      {memory.imageDataUrl && (
+      {firstImage && (
         <div className="h-24 w-full overflow-hidden rounded-t">
           <img
-            src={memory.imageDataUrl}
+            src={firstImage}
             alt=""
             className="h-full w-full object-cover"
           />

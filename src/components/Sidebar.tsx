@@ -4,9 +4,13 @@ import { useIsMd } from '../hooks/useMediaQuery';
 import { useMemoryStore } from '../store/memoryStore';
 import { SearchBar } from './SearchBar';
 import { ConfirmDialog } from './ConfirmDialog';
-import { compareOrderThenCreatedAt, memoriesInSidebarOrder } from '../utils/memoryOrder';
+import { CalendarView } from './CalendarView';
+import { StatsDashboard } from './StatsDashboard';
+import { compareMemories } from '../utils/memoryOrder';
 import { formatDate } from '../utils/formatDate';
 import { getMemoryLabel } from '../utils/memoryLabel';
+import { getMemoryImages } from '../utils/imageUtils';
+import { filterMemoriesByDate } from '../utils/dateFilter';
 import type { Memory } from '../types/memory';
 
 const UNGROUPED_ID = '__ungrouped__';
@@ -14,7 +18,9 @@ const UNGROUPED_ID = '__ungrouped__';
 function memoryMatchesSearch(m: Memory, q: string): boolean {
   if (!q.trim()) return true;
   const lower = q.toLowerCase();
+  const tagMatch = (m.tags ?? []).some((t) => t.toLowerCase().includes(lower));
   return (
+    tagMatch ||
     m.title.toLowerCase().includes(lower) ||
     m.notes.toLowerCase().includes(lower) ||
     m.date.toLowerCase().includes(lower)
@@ -104,6 +110,9 @@ function MemoryListItem({
   onLabelChange,
   onClick,
   onToggleHide,
+  onToggleStar,
+  onToggleSelect,
+  isSelected,
   onDelete,
   onDragStartWithId,
 }: {
@@ -114,6 +123,9 @@ function MemoryListItem({
   onLabelChange?: (memoryId: string, value: string | null) => void;
   onClick: (e: React.MouseEvent) => void;
   onToggleHide: (e: React.MouseEvent) => void;
+  onToggleStar?: (e: React.MouseEvent) => void;
+  onToggleSelect?: (e: React.MouseEvent) => void;
+  isSelected?: boolean;
   onDelete?: (e: React.MouseEvent) => void;
   onDragStartWithId?: (memoryId: string) => void;
 }) {
@@ -131,6 +143,19 @@ function MemoryListItem({
 
   return (
     <div className="group/mem flex w-full min-h-[28px] touch-target items-center gap-0 rounded-sm border-l-2 border-transparent py-0.5 pl-0 pr-0.5 transition-colors hover:bg-surface-elevated hover:border-accent/50 active:bg-surface-elevated">
+      {onToggleSelect && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleSelect(e); }}
+          className="flex-shrink-0 flex min-h-[28px] min-w-[28px] items-center justify-center p-1 text-text-muted hover:text-accent"
+          aria-label={isSelected ? 'Deselect' : 'Select'}
+          aria-pressed={isSelected}
+        >
+          <span className={`flex h-4 w-4 items-center justify-center rounded border-2 ${isSelected ? 'border-accent bg-accent' : 'border-current'}`}>
+            {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M5 12l5 5L20 7" /></svg>}
+          </span>
+        </button>
+      )}
       <div
         draggable
         onDragStart={(e) => {
@@ -192,9 +217,9 @@ function MemoryListItem({
         className={`flex min-h-[28px] min-w-0 flex-1 touch-target items-center gap-1.5 py-0.5 pl-1 text-left ${isHidden ? 'opacity-50' : ''}`}
       >
         <div className="h-6 w-6 flex-shrink-0 overflow-hidden rounded bg-surface-elevated">
-          {memory.imageDataUrl ? (
+          {getMemoryImages(memory)[0] ? (
             <img
-              src={memory.imageDataUrl}
+              src={getMemoryImages(memory)[0]}
               alt=""
               className="h-full w-full object-cover"
             />
@@ -213,6 +238,19 @@ function MemoryListItem({
           </div>
         </div>
       </button>
+      {onToggleStar && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleStar(e); }}
+          className="flex-shrink-0 touch-target min-h-[28px] min-w-[28px] p-1 text-text-muted hover:text-accent active:text-accent"
+          aria-label={memory.starred ? 'Unstar' : 'Star'}
+          title={memory.starred ? 'Unstar' : 'Star'}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill={memory.starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
+      )}
       <button
         type="button"
         onClick={(e) => {
@@ -268,6 +306,9 @@ function GroupSection({
   onDelete,
   onMemoryClick,
   onMemoryToggleHide,
+  onMemoryToggleStar,
+  onMemoryToggleSelect,
+  selectedMemoryIds,
   onMemoryDelete,
   onMemoryLabelChange,
   onDropMemory,
@@ -288,6 +329,9 @@ function GroupSection({
   onDelete: () => void;
   onMemoryClick: (e: React.MouseEvent, m: Memory) => void;
   onMemoryToggleHide: (e: React.MouseEvent, m: Memory) => void;
+  onMemoryToggleStar?: (e: React.MouseEvent, m: Memory) => void;
+  onMemoryToggleSelect?: (e: React.MouseEvent, m: Memory) => void;
+  selectedMemoryIds?: string[];
   onMemoryDelete?: (e: React.MouseEvent, m: Memory) => void;
   onMemoryLabelChange?: (memoryId: string, value: string | null) => void;
   onDropMemory: (memoryId: string) => void;
@@ -481,6 +525,9 @@ function GroupSection({
                 onLabelChange={onMemoryLabelChange}
                 onClick={(e) => onMemoryClick(e, m)}
                 onToggleHide={(e) => onMemoryToggleHide(e, m)}
+                onToggleStar={onMemoryToggleStar ? (e) => onMemoryToggleStar(e, m) : undefined}
+                onToggleSelect={onMemoryToggleSelect ? (e) => onMemoryToggleSelect(e, m) : undefined}
+                isSelected={selectedMemoryIds?.includes(m.id)}
                 onDelete={onMemoryDelete ? (e) => onMemoryDelete(e, m) : undefined}
                 onDragStartWithId={(id) => {
                   draggedIdRef.current = id;
@@ -512,6 +559,14 @@ export function Sidebar() {
   const searchQuery = useMemoryStore((s) => s.searchQuery);
   const sidebarOpen = useMemoryStore((s) => s.sidebarOpen);
   const setSidebarOpen = useMemoryStore((s) => s.setSidebarOpen);
+  const filterStarred = useMemoryStore((s) => s.filterStarred);
+  const sortBy = useMemoryStore((s) => s.sortBy);
+  const sortOrder = useMemoryStore((s) => s.sortOrder);
+  const dateFilterFrom = useMemoryStore((s) => s.dateFilterFrom);
+  const dateFilterTo = useMemoryStore((s) => s.dateFilterTo);
+  const setDateFilter = useMemoryStore((s) => s.setDateFilter);
+  const sidebarView = useMemoryStore((s) => s.sidebarView);
+  const setSidebarView = useMemoryStore((s) => s.setSidebarView);
   const sidebarWidth = useMemoryStore((s) => s.sidebarWidth);
   const setSidebarWidth = useMemoryStore((s) => s.setSidebarWidth);
   const isMd = useIsMd();
@@ -529,6 +584,17 @@ export function Sidebar() {
   const [resizing, setResizing] = useState(false);
   const resizeStartRef = useRef({ clientX: 0, width: 0 });
   const removeMemory = useMemoryStore((s) => s.removeMemory);
+  const selectedMemoryIds = useMemoryStore((s) => s.selectedMemoryIds);
+  const toggleSelection = useMemoryStore((s) => s.toggleSelection);
+  const clearSelection = useMemoryStore((s) => s.clearSelection);
+  const bulkDelete = useMemoryStore((s) => s.bulkDelete);
+  const bulkMoveToGroup = useMemoryStore((s) => s.bulkMoveToGroup);
+  const undo = useMemoryStore((s) => s.undo);
+  const redo = useMemoryStore((s) => s.redo);
+  const undoStack = useMemoryStore((s) => s.undoStack);
+  const redoStack = useMemoryStore((s) => s.redoStack);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -593,13 +659,44 @@ export function Sidebar() {
     [updateMemory]
   );
 
+  const handleMemoryToggleStar = useCallback(
+    (e: React.MouseEvent, m: Memory) => {
+      e.stopPropagation();
+      updateMemory(m.id, { starred: !(m.starred ?? false) });
+    },
+    [updateMemory]
+  );
+
+  const handleMemoryToggleSelect = useCallback(
+    (e: React.MouseEvent, m: Memory) => {
+      e.stopPropagation();
+      toggleSelection(m.id);
+    },
+    [toggleSelection]
+  );
+
+  const visibleMemories = useMemo(() => {
+    let list = filterStarred ? memories.filter((m) => m.starred) : memories;
+    list = filterMemoriesByDate(list, dateFilterFrom, dateFilterTo);
+    return list;
+  }, [memories, filterStarred, dateFilterFrom, dateFilterTo]);
+  const sortCompare = useCallback(
+    (a: Memory, b: Memory) => compareMemories(a, b, sortBy, sortOrder),
+    [sortBy, sortOrder]
+  );
+  const ungroupedMemories = useMemo(
+    () => visibleMemories.filter((m) => !(m.groupId ?? null)).sort(sortCompare),
+    [visibleMemories, sortCompare]
+  );
   const memoryLabels = useMemo(() => {
-    const sorted = memoriesInSidebarOrder(memories, groups);
-    return new Map(sorted.map((m, i) => [m.id, getMemoryLabel(i)]));
-  }, [memories, groups]);
-  const ungroupedMemories = memories
-    .filter((m) => !(m.groupId ?? null))
-    .sort(compareOrderThenCreatedAt);
+    const list: Memory[] = [...ungroupedMemories];
+    for (const g of groups) {
+      list.push(
+        ...visibleMemories.filter((m) => (m.groupId ?? null) === g.id).sort(sortCompare)
+      );
+    }
+    return new Map(list.map((m, i) => [m.id, getMemoryLabel(i)]));
+  }, [ungroupedMemories, groups, visibleMemories, sortCompare]);
   const createNewGroup = () => {
     const id = crypto.randomUUID();
     addGroup({
@@ -655,13 +752,106 @@ export function Sidebar() {
               </svg>
             </button>
           </div>
+          <div className="flex gap-0.5 rounded border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => setSidebarView('list')}
+              className={`font-mono min-h-[28px] flex-1 rounded text-[10px] transition-colors ${
+                sidebarView === 'list' ? 'bg-surface-elevated text-accent' : 'text-text-muted hover:text-text-primary'
+              }`}
+              aria-pressed={sidebarView === 'list'}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarView('calendar')}
+              className={`font-mono min-h-[28px] flex-1 rounded text-[10px] transition-colors ${
+                sidebarView === 'calendar' ? 'bg-surface-elevated text-accent' : 'text-text-muted hover:text-text-primary'
+              }`}
+              aria-pressed={sidebarView === 'calendar'}
+            >
+              Calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarView('stats')}
+              className={`font-mono min-h-[28px] flex-1 rounded text-[10px] transition-colors ${
+                sidebarView === 'stats' ? 'bg-surface-elevated text-accent' : 'text-text-muted hover:text-text-primary'
+              }`}
+              aria-pressed={sidebarView === 'stats'}
+            >
+              Stats
+            </button>
+          </div>
           <div className="h-px bg-accent/40" />
           <SearchBar />
         </div>
         <div className="flex-1 overflow-y-auto px-1.5 py-1">
-          {memories.length === 0 && groups.length === 0 && (
+          {sidebarView === 'calendar' && (
+            <CalendarView
+              memories={visibleMemories}
+              onMemoryClick={handleMemoryClick}
+              onDateFilter={setDateFilter}
+              selectedDateFrom={dateFilterFrom}
+              selectedDateTo={dateFilterTo}
+            />
+          )}
+          {sidebarView === 'stats' && (
+            <StatsDashboard memories={memories} />
+          )}
+          {sidebarView === 'list' && (
+            <>
+          {selectedMemoryIds.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-1 rounded border border-accent/50 bg-accent-glow p-1.5">
+              <span className="font-mono text-[10px] text-text-primary">{selectedMemoryIds.length} selected</span>
+              <button
+                type="button"
+                onClick={() => setBulkMoveOpen(true)}
+                className="font-mono min-h-[28px] rounded border border-border bg-surface px-2 text-[10px] text-text-primary hover:bg-surface-elevated"
+              >
+                Move to group
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmBulkDelete(true)}
+                className="font-mono min-h-[28px] rounded border border-danger/50 px-2 text-[10px] text-danger hover:bg-danger/10"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="font-mono min-h-[28px] rounded border border-border px-2 text-[10px] text-text-muted hover:text-text-primary"
+              >
+                Clear
+              </button>
+              {bulkMoveOpen && (
+                <div className="w-full border-t border-border pt-1.5">
+                  {groups.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => { bulkMoveToGroup(selectedMemoryIds, g.id); setBulkMoveOpen(false); }}
+                      className="font-mono block w-full text-left py-1 px-2 text-[10px] text-text-primary hover:bg-surface-elevated"
+                    >
+                      {g.name}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { bulkMoveToGroup(selectedMemoryIds, null); setBulkMoveOpen(false); }}
+                    className="font-mono block w-full text-left py-1 px-2 text-[10px] text-text-primary hover:bg-surface-elevated"
+                  >
+                    Ungrouped
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {visibleMemories.length === 0 && (memories.length === 0 || filterStarred) && (
             <p className="font-body py-1 text-center text-[11px] text-text-muted">
-              No memories yet. Click the map to pin one.
+              {filterStarred ? 'No starred memories. Star a memory to see it here.' : 'No memories yet. Click the map to pin one.'}
             </p>
           )}
           <div className="space-y-0.5">
@@ -677,6 +867,9 @@ export function Sidebar() {
               onDelete={() => {}}
               onMemoryClick={handleMemoryClick}
               onMemoryToggleHide={handleMemoryToggleHide}
+              onMemoryToggleStar={handleMemoryToggleStar}
+              onMemoryToggleSelect={handleMemoryToggleSelect}
+              selectedMemoryIds={selectedMemoryIds}
               onMemoryDelete={handleMemoryDelete}
               onMemoryLabelChange={handleMemoryLabelChange}
               onDropMemory={(memoryId) => updateMemory(memoryId, { groupId: null })}
@@ -689,9 +882,9 @@ export function Sidebar() {
                 key={g.id}
                 id={g.id}
                 name={g.name}
-                memories={memories
+                memories={visibleMemories
                   .filter((m) => (m.groupId ?? null) === g.id)
-                  .sort(compareOrderThenCreatedAt)}
+                  .sort(sortCompare)}
                 searchQuery={searchQuery}
                 collapsed={g.collapsed}
                 hidden={g.hidden ?? false}
@@ -700,6 +893,9 @@ export function Sidebar() {
                 onDelete={() => setConfirmDeleteGroup({ id: g.id, name: g.name })}
                 onMemoryClick={handleMemoryClick}
                 onMemoryToggleHide={handleMemoryToggleHide}
+                onMemoryToggleStar={handleMemoryToggleStar}
+                onMemoryToggleSelect={handleMemoryToggleSelect}
+                selectedMemoryIds={selectedMemoryIds}
                 onMemoryDelete={handleMemoryDelete}
                 onMemoryLabelChange={handleMemoryLabelChange}
                 onDropMemory={(memoryId) => updateMemory(memoryId, { groupId: g.id })}
@@ -724,10 +920,34 @@ export function Sidebar() {
             New group
           </button>
           </div>
+            </>
+          )}
         </div>
-        <div className="border-t border-border px-2 py-1.5">
+        <div className="border-t border-border px-2 py-1.5 space-y-1">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={undoStack.length === 0}
+              className="font-mono min-h-[24px] flex-1 rounded border border-border px-1.5 text-[10px] text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary disabled:opacity-40 disabled:pointer-events-none"
+              aria-label="Undo"
+              title="Undo (Ctrl+Z)"
+            >
+              Undo
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={redoStack.length === 0}
+              className="font-mono min-h-[24px] flex-1 rounded border border-border px-1.5 text-[10px] text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary disabled:opacity-40 disabled:pointer-events-none"
+              aria-label="Redo"
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              Redo
+            </button>
+          </div>
           <p className="font-mono text-[10px] text-text-secondary">
-            {memories.length} MEMORIES ARCHIVED
+            {filterStarred ? `${visibleMemories.length} FAVORITES` : `${memories.length} MEMORIES ARCHIVED`}
           </p>
         </div>
         </div>
@@ -785,6 +1005,19 @@ export function Sidebar() {
           }
         }}
         onCancel={() => setConfirmDeleteMemory(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete selected memories"
+        message={`Delete ${selectedMemoryIds.length} selected memory(ies) from the atlas?`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => {
+          bulkDelete(selectedMemoryIds);
+          setConfirmBulkDelete(false);
+        }}
+        onCancel={() => setConfirmBulkDelete(false)}
       />
     </>
   );

@@ -1,5 +1,14 @@
+import type { Memory } from '../types/memory';
+
 const MAX_WIDTH = 1200;
 const JPEG_QUALITY = 0.8;
+
+/** All image data URLs for a memory (supports legacy imageDataUrl). */
+export function getMemoryImages(memory: Memory): string[] {
+  if (memory.imageDataUrls?.length) return memory.imageDataUrls;
+  if (memory.imageDataUrl) return [memory.imageDataUrl];
+  return [];
+}
 
 /**
  * Compress image via canvas (max width 1200px, quality 0.8) then return as base64 data URL.

@@ -1,10 +1,49 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useMemoryStore } from '../store/memoryStore';
 import { formatDate } from '../utils/formatDate';
 import { formatCoords } from '../utils/formatCoords';
+import { getMemoryImages } from '../utils/imageUtils';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { ConfirmDialog } from './ConfirmDialog';
 import type { Memory } from '../types/memory';
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Safe href for exported HTML: only http/https to prevent javascript: or data: XSS. */
+function safeLinkHref(u: string): string {
+  const t = u.trim();
+  if (/^https?:\/\//i.test(t)) return t;
+  return 'https://' + t;
+}
+
+function exportMemoryAsHtml(memory: Memory): void {
+  const img = getMemoryImages(memory)[0];
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${escapeHtml(memory.title || 'Untitled')} – Memory Atlas</title>
+<style>body{font-family:system-ui,sans-serif;max-width:600px;margin:2rem auto;padding:0 1rem;color:#1a1917;background:#f5f3ef;}
+h1{font-size:1.5rem;} .muted{color:#6b6872;font-size:0.875rem;} .notes{white-space:pre-wrap;margin-top:1rem;}
+img{max-width:100%;height:auto;border-radius:8px;} a{color:#2563eb;}</style></head>
+<body>
+${img ? `<img src="${img}" alt=""/>` : ''}
+<h1>${escapeHtml(memory.title || 'Untitled')}</h1>
+<p class="muted">${formatDate(memory.date, true)} · ${memory.lat.toFixed(4)}, ${memory.lng.toFixed(4)}</p>
+${memory.notes ? `<div class="notes">${escapeHtml(memory.notes)}</div>` : ''}
+${memory.links?.length ? `<p class="muted">Links: ${memory.links.map((u) => `<a href="${escapeHtml(safeLinkHref(u))}">${escapeHtml(u)}</a>`).join(', ')}</p>` : ''}
+<p class="muted" style="margin-top:2rem;">Memory Atlas V3</p>
+</body></html>`;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `memory-${(memory.title || 'untitled').replace(/\s+/g, '-').slice(0, 30)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 interface MemoryViewerProps {
   memory: Memory;
@@ -13,6 +52,7 @@ interface MemoryViewerProps {
 
 export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
   const removeMemory = useMemoryStore((s) => s.removeMemory);
+  const updateMemory = useMemoryStore((s) => s.updateMemory);
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
   const [hasHover, setHasHover] = useState(false);
   const photoRef = useRef<HTMLDivElement>(null);
@@ -52,8 +92,11 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
 
   const [active, setActive] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const images = getMemoryImages(memory);
+  const [imageIndex, setImageIndex] = useState(0);
   const viewerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(viewerRef, true);
+  const currentImage = images[imageIndex] ?? null;
   useEffect(() => {
     const t = requestAnimationFrame(() => setActive(true));
     return () => cancelAnimationFrame(t);
@@ -97,13 +140,81 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
           <p className="font-mono mt-2 text-sm text-text-secondary">
             {formatDate(memory.date, true)}
           </p>
+          {memory.tags && memory.tags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {memory.tags.map((t) => (
+                <span
+                  key={t}
+                  className="rounded bg-surface-elevated px-2 py-0.5 font-mono text-xs text-text-secondary"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
           {memory.notes && (
-            <p className="font-body mt-6 text-text-primary/90 leading-relaxed">
-              {memory.notes}
-            </p>
+            <div className="font-body mt-6 text-text-primary/90 leading-relaxed [&_p]:my-1 [&_h1]:text-xl [&_h2]:text-lg [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-accent [&_a]:underline">
+              <ReactMarkdown
+                components={{
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent">
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {memory.notes}
+              </ReactMarkdown>
+            </div>
+          )}
+          {memory.links && memory.links.length > 0 && (
+            <div className="mt-4">
+              <div className="font-mono text-[10px] text-text-muted mb-1">Links</div>
+              <ul className="space-y-1">
+                {memory.links.map((url, i) => (
+                  <li key={i}>
+                    <a
+                      href={url.startsWith('http') ? url : `https://${url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-sm text-accent break-all hover:underline"
+                    >
+                      {url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => updateMemory(memory.id, { starred: !(memory.starred ?? false) })}
+            aria-label={memory.starred ? 'Unstar' : 'Star'}
+            className="font-mono touch-target flex min-h-[44px] items-center gap-2 px-3 text-sm text-text-secondary transition-colors hover:text-accent active:opacity-80"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill={memory.starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            {memory.starred ? 'Unstar' : 'Star'}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="font-mono touch-target min-h-[44px] px-3 text-sm text-text-secondary hover:text-accent"
+            aria-label="Print"
+          >
+            Print
+          </button>
+          <button
+            type="button"
+            onClick={() => exportMemoryAsHtml(memory)}
+            className="font-mono touch-target min-h-[44px] px-3 text-sm text-text-secondary hover:text-accent"
+            aria-label="Export as HTML"
+          >
+            Export HTML
+          </button>
           <button
             type="button"
             onClick={handleRemove}
@@ -131,9 +242,9 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
         onMouseMove={hasHover ? handleMouseMove : undefined}
         onMouseLeave={hasHover ? handleMouseLeave : undefined}
       >
-        {memory.imageDataUrl ? (
+        {currentImage ? (
           <img
-            src={memory.imageDataUrl}
+            src={currentImage}
             alt=""
             className="h-full w-full object-cover transition-transform duration-150 ease-out"
             style={
@@ -146,6 +257,33 @@ export function MemoryViewer({ memory, onClose }: MemoryViewerProps) {
           <div className="flex h-full w-full items-center justify-center text-text-muted font-mono text-sm">
             No photo
           </div>
+        )}
+        {images.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setImageIndex((i) => (i === 0 ? images.length - 1 : i - 1))}
+              className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-text-primary shadow hover:bg-surface-elevated"
+              aria-label="Previous photo"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => setImageIndex((i) => (i === images.length - 1 ? 0 : i + 1))}
+              className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-text-primary shadow hover:bg-surface-elevated"
+              aria-label="Next photo"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded bg-background/80 px-2 py-0.5 font-mono text-xs text-text-secondary">
+              {imageIndex + 1} / {images.length}
+            </span>
+          </>
         )}
       </div>
     </div>

@@ -22,24 +22,27 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
       if (e.key !== 'Tab') return;
       const current = document.activeElement;
       if (!current || !(current instanceof HTMLElement)) return;
+      // Recompute focusable on each Tab so dynamically added content (emoji picker, dropdowns) is included
+      const focusableNow = getFocusable(el);
+      if (focusableNow.length === 0) return;
       if (!el.contains(current)) {
         e.preventDefault();
-        const firstEl = focusable[0];
+        const firstEl = focusableNow[0];
         if (firstEl) firstEl.focus();
         return;
       }
-      const idx = focusable.indexOf(current);
+      const idx = focusableNow.indexOf(current);
       if (idx === -1) return;
       if (e.shiftKey) {
         if (idx === 0) {
           e.preventDefault();
-          const lastEl = focusable[focusable.length - 1];
+          const lastEl = focusableNow[focusableNow.length - 1];
           if (lastEl) lastEl.focus();
         }
       } else {
-        if (idx === focusable.length - 1) {
+        if (idx === focusableNow.length - 1) {
           e.preventDefault();
-          const firstEl = focusable[0];
+          const firstEl = focusableNow[0];
           if (firstEl) firstEl.focus();
         }
       }

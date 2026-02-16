@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import EmojiPicker, { type EmojiClickData, Theme, EmojiStyle } from 'emoji-picker-react';
 import { useMemoryStore } from '../store/memoryStore';
-import { compressImageToDataUrl } from '../utils/imageUtils';
+import { compressImageToDataUrl, getMemoryImages } from '../utils/imageUtils';
 import { formatCoords } from '../utils/formatCoords';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
@@ -36,14 +36,18 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
   const [date, setDate] = useState(
     () => editingMemory?.date ?? new Date().toISOString().slice(0, 10)
   );
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(
-    editingMemory?.imageDataUrl ?? null
+  const [imageDataUrls, setImageDataUrls] = useState<string[]>(() =>
+    editingMemory ? getMemoryImages(editingMemory) : []
   );
   const defaultGroupId = useMemoryStore((s) => s.defaultGroupId);
   const [groupId, setGroupId] = useState<string | null>(
     editingMemory ? (editingMemory.groupId ?? null) : (defaultGroupId ?? null)
   );
   const [customLabel, setCustomLabel] = useState(editingMemory?.customLabel ?? '');
+  const [tags, setTags] = useState<string[]>(() => editingMemory?.tags ?? []);
+  const [tagInput, setTagInput] = useState('');
+  const [links, setLinks] = useState<string[]>(() => editingMemory?.links ?? []);
+  const [linkInput, setLinkInput] = useState('');
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerRect, setEmojiPickerRect] = useState<{ top: number; left: number } | null>(null);
   const iconButtonRef = useRef<HTMLButtonElement>(null);
@@ -57,19 +61,25 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
   const { location, loading: locationLoading } = useReverseGeocode(effectiveLat, effectiveLng);
   useFocusTrap(modalRef, !!(pending || editingMemory));
 
-  const handleFile = useCallback(
-    async (file: File | null) => {
-      if (!file || !file.type.startsWith('image/')) {
-        setUploadError('Please choose an image file.');
-        return;
-      }
+  const handleFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length) return;
       setUploadError(null);
-      try {
-        const dataUrl = await compressImageToDataUrl(file);
-        setImageDataUrl(dataUrl);
-      } catch {
-        setUploadError('Failed to process image.');
+      const toAdd: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) {
+          setUploadError('Please choose image files only.');
+          continue;
+        }
+        try {
+          const dataUrl = await compressImageToDataUrl(file);
+          toAdd.push(dataUrl);
+        } catch {
+          setUploadError('Failed to process an image.');
+        }
       }
+      if (toAdd.length) setImageDataUrls((prev) => [...prev, ...toAdd]);
     },
     []
   );
@@ -77,25 +87,45 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    handleFile(file ?? null);
+    handleFiles(e.dataTransfer.files);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    handleFile(file ?? null);
+    handleFiles(e.target.files);
+  };
+
+  const removeImageAt = (index: number) => {
+    setImageDataUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addTag = () => {
+    const t = tagInput.trim().toLowerCase();
+    if (t && !tags.includes(t)) setTags((prev) => [...prev, t]);
+    setTagInput('');
+  };
+
+  const addLink = () => {
+    const u = linkInput.trim();
+    if (u && !links.includes(u)) setLinks((prev) => [...prev, u]);
+    setLinkInput('');
   };
 
   const handleSave = () => {
     const chosenGroupId = groupId || null;
+    const firstImage = imageDataUrls[0] ?? null;
+    const tagsToSave = tags.length ? tags : undefined;
+    const linksToSave = links.length ? links : undefined;
     if (editingMemory) {
       updateMemory(editingMemory.id, {
         title: title.trim() || 'Untitled',
         date,
         notes: notes.trim(),
-        imageDataUrl,
+        imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
+        imageDataUrl: firstImage,
         groupId: chosenGroupId,
         customLabel: customLabel.trim() || undefined,
+        tags: tagsToSave,
+        links: linksToSave,
       });
       setEditingMemory(null);
     } else if (pending) {
@@ -106,10 +136,13 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
         title: title.trim() || 'Untitled',
         date,
         notes: notes.trim(),
-        imageDataUrl,
+        imageDataUrl: firstImage,
+        imageDataUrls: imageDataUrls.length ? imageDataUrls : undefined,
         createdAt: new Date().toISOString(),
         groupId: chosenGroupId,
         customLabel: customLabel.trim() || undefined,
+        tags: tagsToSave,
+        links: linksToSave,
       };
       addMemory(memory);
       if (chosenGroupId) setDefaultGroupId(chosenGroupId);
@@ -239,7 +272,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => {
-            if (imageDataUrl) {
+            if (imageDataUrls.length) {
               setImagePreviewOpen(true);
             } else {
               fileInputRef.current?.click();
@@ -253,25 +286,47 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={handleFileInput}
           />
-          {imageDataUrl ? (
+          {imageDataUrls[0] ? (
             <img
-              src={imageDataUrl}
+              src={imageDataUrls[0]}
               alt="Preview"
               className="h-full w-full rounded object-cover pointer-events-none"
             />
           ) : (
             <span className="font-mono text-sm text-text-muted">
-              Drop photo or click to upload
+              Drop photos or click to upload
             </span>
           )}
           {uploadError && (
             <p className="mt-2 font-mono text-xs text-danger">{uploadError}</p>
           )}
         </div>
-        {imagePreviewOpen && imageDataUrl && (
+        {imageDataUrls.length > 1 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {imageDataUrls.map((url, i) => (
+              <div key={i} className="relative">
+                <img
+                  src={url}
+                  alt=""
+                  className="h-14 w-14 rounded object-cover border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); removeImageAt(i); }}
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-[10px] text-white"
+                  aria-label="Remove photo"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {imagePreviewOpen && imageDataUrls.length > 0 && (
           <>
             <div
               className="fixed inset-0 z-[1102] bg-background/80 backdrop-blur-sm"
@@ -290,7 +345,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
                 onClick={(e) => e.stopPropagation()}
               >
                 <img
-                  src={imageDataUrl}
+                  src={imageDataUrls[0]}
                   alt="Preview"
                   className="max-h-[85vh] max-w-full object-contain"
                 />
@@ -303,7 +358,7 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
                     }}
                     className="font-mono touch-target min-h-[40px] px-3 text-sm text-accent underline-offset-2 hover:underline"
                   >
-                    Change photo
+                    Add more photos
                   </button>
                   <button
                     type="button"
@@ -450,6 +505,86 @@ export function AddMemoryModal({ pending, editingMemory, onClose }: AddMemoryMod
           rows={4}
           className="font-body mt-4 w-full resize-none border-none bg-transparent text-base text-text-primary placeholder-text-muted outline-none"
         />
+
+        <div className="mt-4">
+          <label className="font-mono mb-1 block text-xs text-text-secondary">Tags</label>
+          <div className="flex flex-wrap items-center gap-2">
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-1 rounded bg-surface-elevated px-2 py-0.5 font-mono text-xs text-text-primary"
+              >
+                {t}
+                <button
+                  type="button"
+                  onClick={() => setTags((prev) => prev.filter((x) => x !== t))}
+                  className="touch-target -mr-0.5 flex h-5 w-5 items-center justify-center rounded text-text-muted hover:text-danger"
+                  aria-label={`Remove tag ${t}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <div className="flex min-w-[120px] flex-1 items-center gap-1">
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                placeholder="Add tag..."
+                className="font-mono min-h-[32px] flex-1 rounded border border-border bg-transparent px-2 text-xs text-text-primary placeholder-text-muted outline-none focus:border-accent"
+              />
+              <button
+                type="button"
+                onClick={addTag}
+                className="font-mono touch-target min-h-[32px] px-2 text-xs text-accent hover:underline"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label className="font-mono mb-1 block text-xs text-text-secondary">Links</label>
+          <div className="flex flex-wrap items-center gap-2">
+            {links.map((url, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded bg-surface-elevated px-2 py-0.5 font-mono text-xs text-text-primary"
+              >
+                <a href={url.startsWith('http') ? url : `https://${url}`} target="_blank" rel="noopener noreferrer" className="truncate max-w-[160px] text-accent hover:underline">
+                  {url}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLinks((prev) => prev.filter((_, j) => j !== i))}
+                  className="touch-target -mr-0.5 flex h-5 w-5 items-center justify-center rounded text-text-muted hover:text-danger"
+                  aria-label="Remove link"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <div className="flex min-w-[120px] flex-1 items-center gap-1">
+              <input
+                type="url"
+                value={linkInput}
+                onChange={(e) => setLinkInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLink())}
+                placeholder="https://..."
+                className="font-mono min-h-[32px] flex-1 rounded border border-border bg-transparent px-2 text-xs text-text-primary placeholder-text-muted outline-none focus:border-accent"
+              />
+              <button
+                type="button"
+                onClick={addLink}
+                className="font-mono touch-target min-h-[32px] px-2 text-xs text-accent hover:underline"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <button

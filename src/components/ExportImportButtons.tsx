@@ -153,6 +153,22 @@ export function ExportImportButtons() {
         </svg>
       </button>
 
+      {/* Contact: round button — opens samreddy.work in new tab */}
+      <a
+        href="https://samreddy.work/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className={FIXED_BUTTON_CLASS}
+        style={{ top: 'calc(max(1.5rem, env(safe-area-inset-top, 0px)) + 24.5rem)', right: 'max(1.5rem, env(safe-area-inset-right, 0px))' }}
+        aria-label="Contact"
+        title="Contact"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-secondary">
+          <rect width="20" height="16" x="2" y="4" rx="2" />
+          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+        </svg>
+      </a>
+
       {importError && (
         <p
           className="fixed z-[1101] font-mono max-w-[160px] text-[10px] text-danger"

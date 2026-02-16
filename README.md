@@ -1,4 +1,4 @@
-# Memory Atlas V3
+# Memory Atlas
 
 A **map-based memory journal** that lets you pin life moments to places, organize them in groups, and explore them on a timeline—all in the browser, with no account required.
 
@@ -55,7 +55,7 @@ A **map-based memory journal** that lets you pin life moments to places, organiz
   - `hooks/` — `useFocusTrap`, `useMediaQuery`, etc.
 - `public/` — Static assets (e.g. 404 page for SPA routing on GitHub Pages).
 - `scripts/copy-to-docs.cjs` — Optional script to copy build output to `docs/` for branch-based GitHub Pages.
-- **Base path** — Vite is configured with `base: '/Memory-Atlas-V3/'` for GitHub Pages repo deployment.
+- **Base path** — Vite is configured with `base: '/Memory-Atlas/'` for GitHub Pages repo deployment.
 
 ### Run and build
 
@@ -92,7 +92,7 @@ Web and Electron share the same codebase; the Electron build uses `base: './'` a
 1. In the repo go to **Settings** → **Pages** → under **Build and deployment**, set **Source** to **GitHub Actions**. Save.
 2. Push the repo (including `.github/workflows/deploy-pages.yml`) to `main`. The workflow will build the app and deploy to GitHub Pages.
 3. After the action completes (see the **Actions** tab), open:  
-   `https://<your-username>.github.io/Memory-Atlas-V3/`
+   `https://<your-username>.github.io/Memory-Atlas/`
 
 Each push to `main` will rebuild and redeploy. You don’t need to run `build:pages` or commit the `docs` folder.
 

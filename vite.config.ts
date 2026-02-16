@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const isElectron = process.env.ELECTRON === '1'
-const base = isElectron ? './' : '/Memory-Atlas-V3/'
+const base = isElectron ? './' : '/Memory-Atlas/'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -14,16 +14,16 @@ export default defineConfig({
       : [
           VitePWA({
             registerType: 'autoUpdate',
-            base: '/Memory-Atlas-V3/',
+            base: '/Memory-Atlas/',
             manifest: {
-              name: 'Memory Atlas V3',
+              name: 'Memory Atlas',
               short_name: 'Memory Atlas',
               description: 'Map and organize your memories',
               theme_color: '#0a0a0b',
               background_color: '#0a0a0b',
               display: 'standalone',
-              start_url: '/Memory-Atlas-V3/',
-              scope: '/Memory-Atlas-V3/',
+              start_url: '/Memory-Atlas/',
+              scope: '/Memory-Atlas/',
             },
             workbox: {
               globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],

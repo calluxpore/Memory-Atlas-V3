@@ -34,7 +34,7 @@ ${img ? `<img src="${img}" alt=""/>` : ''}
 <p class="muted">${formatDate(memory.date, true)} · ${memory.lat.toFixed(4)}, ${memory.lng.toFixed(4)}</p>
 ${memory.notes ? `<div class="notes">${escapeHtml(memory.notes)}</div>` : ''}
 ${memory.links?.length ? `<p class="muted">Links: ${memory.links.map((u) => `<a href="${escapeHtml(safeLinkHref(u))}">${escapeHtml(u)}</a>`).join(', ')}</p>` : ''}
-<p class="muted" style="margin-top:2rem;">Memory Atlas V3</p>
+<p class="muted" style="margin-top:2rem;">Memory Atlas</p>
 </body></html>`;
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);

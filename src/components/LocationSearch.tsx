@@ -36,7 +36,7 @@ async function searchNominatim(query: string, signal?: AbortSignal): Promise<Geo
     signal,
     headers: {
       Accept: 'application/json',
-      'User-Agent': 'MemoryAtlasV3/1.0 (https://github.com/memory-atlas)',
+      'User-Agent': 'MemoryAtlas/1.0 (https://github.com/memory-atlas)',
     },
   });
   if (!res.ok) return [];

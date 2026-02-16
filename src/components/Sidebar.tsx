@@ -728,7 +728,7 @@ export function Sidebar() {
         <div className="flex flex-col gap-1 border-b border-border p-2">
           <div className="flex items-center gap-1">
             <h1 className="font-display min-w-0 flex-1 text-base font-semibold tracking-tight text-text-primary">
-              MEMORY ATLAS<sup className="font-mono text-[10px] text-text-secondary"> V3</sup>
+              MEMORY ATLAS
             </h1>
             <button
               type="button"

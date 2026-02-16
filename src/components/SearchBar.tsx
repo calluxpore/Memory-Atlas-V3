@@ -14,14 +14,16 @@ export function SearchBar() {
   }, []);
 
   return (
-    <input
-      ref={inputRef}
-      type="text"
-      value={searchQuery}
-      onChange={(e) => setSearchQuery(e.target.value)}
-      placeholder="Search memories... (/)"
-      className="font-mono w-full min-h-[28px] touch-target bg-transparent py-1 px-0 text-xs text-text-primary placeholder-text-muted outline-none border-none focus:ring-0"
-      aria-label="Search memories by title, notes, or date"
-    />
+    <div className="rounded-xl border border-border bg-surface/80 focus-within:border-accent/60 focus-within:bg-surface transition-colors">
+      <input
+        ref={inputRef}
+        type="text"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Search memories... (/)"
+        className="font-mono w-full min-h-[36px] touch-target rounded-xl bg-transparent py-2 px-3 text-xs text-text-primary placeholder-text-muted outline-none border-none focus:ring-0"
+        aria-label="Search memories by title, notes, or date"
+      />
+    </div>
   );
 }

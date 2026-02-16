@@ -29,7 +29,7 @@ export function TimelineToggle() {
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={timelineEnabled ? 'text-accent' : 'text-text-secondary'}
+        className="text-text-secondary"
       >
         {/* Smooth path through points (timeline/route) */}
         <path d="M4 17c2-2 4-4 6-4s4 2 6 4 2 3 4 3" />

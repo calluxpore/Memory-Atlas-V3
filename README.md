@@ -66,6 +66,23 @@ npm run build    # Production build (output in dist/)
 npm run preview  # Preview production build locally
 ```
 
+### Electron (desktop app)
+
+You can run Memory Atlas as a desktop app and build installers for Windows (and, with the same setup, macOS/Linux):
+
+```bash
+npm run electron:dev   # Dev: Vite + Electron window (with DevTools)
+npm run electron:build # Build: outputs in release/
+```
+
+After `electron:build` you get:
+
+- **release/win-unpacked/** — Unpacked app (run `Memory Atlas.exe` to test).
+- **release/Memory Atlas Setup 1.0.0.exe** — NSIS installer (download and install).
+- **release/Memory Atlas 1.0.0.exe** — Portable executable (no install).
+
+Web and Electron share the same codebase; the Electron build uses `base: './'` and skips the PWA plugin.
+
 ---
 
 ## Deploy to GitHub Pages

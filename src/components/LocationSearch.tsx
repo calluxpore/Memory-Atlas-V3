@@ -229,7 +229,7 @@ export function LocationSearch() {
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Search a location..."
-          className="font-mono w-full min-h-[44px] touch-target rounded border border-border bg-surface/95 py-3 pl-4 pr-12 text-base text-text-primary placeholder-text-muted outline-none backdrop-blur-sm focus:border-accent md:py-2.5 md:text-sm"
+          className="font-mono w-full min-h-[44px] touch-target rounded-full border border-border bg-surface/95 py-3 pl-4 pr-12 text-base text-text-primary placeholder-text-muted outline-none backdrop-blur-sm focus:border-accent md:py-2.5 md:text-sm"
           aria-label="Search location"
           aria-autocomplete="list"
           aria-expanded={showDropdown}
@@ -256,7 +256,7 @@ export function LocationSearch() {
       </div>
       {showDropdown && (
         <ul
-          className="absolute bottom-full left-0 right-0 mb-1 max-h-56 overflow-y-auto rounded border border-border bg-surface shadow-lg"
+          className="absolute bottom-full left-0 right-0 mb-1 max-h-56 overflow-y-auto rounded-3xl border border-border bg-surface shadow-lg"
           role="listbox"
         >
           {loading && results.length === 0 && !error ? (

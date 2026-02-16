@@ -23,7 +23,7 @@ export function HeatmapToggle() {
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
-        className={heatmapEnabled ? 'text-accent' : 'text-text-secondary'}
+        className="text-text-secondary"
       >
         <circle cx="12" cy="12" r="10" opacity="0.3" />
         <circle cx="12" cy="12" r="6" opacity="0.5" />

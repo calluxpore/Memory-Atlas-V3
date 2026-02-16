@@ -633,7 +633,7 @@ export function Sidebar() {
       e.preventDefault();
       setCardTargetMemoryId(memory.id);
       if (map) {
-        map.flyTo([memory.lat, memory.lng], 12, { duration: 0.5 });
+        map.flyTo([memory.lat, memory.lng], 17, { duration: 0.5 });
       }
     },
     [map, setCardTargetMemoryId]

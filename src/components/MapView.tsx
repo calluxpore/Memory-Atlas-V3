@@ -15,6 +15,7 @@ import type { SearchHighlight } from '../store/memoryStore';
 import { getMemoryLabel } from '../utils/memoryLabel';
 import { memoriesInSidebarOrder, compareOrderThenCreatedAt } from '../utils/memoryOrder';
 import { filterMemoriesByDate } from '../utils/dateFilter';
+import { smoothCurveThroughPoints } from '../utils/timelineCurve';
 import { useIsMd } from '../hooks/useMediaQuery';
 
 function ZoomControlPlacement() {
@@ -182,18 +183,21 @@ function MapContent({
         .filter((m) => (m.groupId ?? null) === g.id && !(m.hidden ?? false))
         .sort(compareOrderThenCreatedAt);
       if (groupMemories.length < 2) continue;
-      paths.push(groupMemories.map((m) => [m.lat, m.lng]));
+      const raw = groupMemories.map((m) => [m.lat, m.lng] as [number, number]);
+      paths.push(smoothCurveThroughPoints(raw, 16));
     }
     const ungrouped = memories
       .filter((m) => (m.groupId ?? null) === null && !(m.hidden ?? false))
       .sort(compareOrderThenCreatedAt);
     if (ungrouped.length >= 2) {
-      paths.push(ungrouped.map((m) => [m.lat, m.lng]));
+      const raw = ungrouped.map((m) => [m.lat, m.lng] as [number, number]);
+      paths.push(smoothCurveThroughPoints(raw, 16));
     }
     const visibleSorted = memories
       .filter((m) => visibleMemoryIds.has(m.id))
       .sort((a, b) => a.date.localeCompare(b.date) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    const globalRoutePath = visibleSorted.length >= 2 ? visibleSorted.map((m) => [m.lat, m.lng] as [number, number]) : null;
+    const globalRaw = visibleSorted.length >= 2 ? visibleSorted.map((m) => [m.lat, m.lng] as [number, number]) : null;
+    const globalRoutePath = globalRaw && globalRaw.length >= 2 ? smoothCurveThroughPoints(globalRaw, 16) : null;
     return { timelinePaths: paths, globalRoutePath };
   })();
 
@@ -242,9 +246,9 @@ function MapContent({
           positions={positions}
           pathOptions={{
             color: TIMELINE_COLOR[theme],
-            weight: 2.5,
-            opacity: 1,
-            dashArray: '10, 8',
+            weight: 2,
+            opacity: 0.9,
+            dashArray: '8 6',
             lineCap: 'round',
             lineJoin: 'round',
             interactive: false,
@@ -258,7 +262,8 @@ function MapContent({
           pathOptions={{
             color: TIMELINE_COLOR[theme],
             weight: 2,
-            opacity: 0.7,
+            opacity: 0.75,
+            dashArray: '8 6',
             lineCap: 'round',
             lineJoin: 'round',
             interactive: false,

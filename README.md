@@ -31,7 +31,7 @@ A **map-based memory journal** that lets you pin life moments to places, organiz
 - **Reusable and hackable** — Built with standard web tech (React, TypeScript, Leaflet, Vite), so you can run it locally, deploy to GitHub Pages, or extend it for your own use.
 
 ---
-
+ 
 ## How it’s built
 
 ### Stack
